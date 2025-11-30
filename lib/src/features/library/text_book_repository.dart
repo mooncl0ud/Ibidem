@@ -5,6 +5,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:isar/isar.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../../data/local/local_database_provider.dart';
 import '../../data/local/schema/text_book_schema.dart';
 import '../authentication/auth_repository.dart';
@@ -32,7 +34,7 @@ class TextBookRepository {
   Future<TextBook?> importTextFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['txt'],
+      allowedExtensions: ['txt', 'epub'],
     );
 
     if (result == null || result.files.isEmpty) {
@@ -41,14 +43,29 @@ class TextBookRepository {
 
     final file = File(result.files.single.path!);
     final fileName = result.files.single.name;
-    final title = fileName.replaceAll('.txt', '');
+    final title = fileName.replaceAll(RegExp(r'\.(txt|epub)$'), '');
+    final isEpub = fileName.toLowerCase().endsWith('.epub');
 
-    // Detect encoding
-    final encodingName = await _textParser.detectEncodingName(file);
+    String encodingName = 'UTF-8';
+    int totalChars = 0;
+    List<int>? byteOffsets;
+    List<int>? charOffsets;
 
-    // Generate Chunk Offsets & Count Characters (Streamed)
-    final (totalChars, byteOffsets, charOffsets) =
-        await _textParser.analyzeFile(file, encodingName: encodingName);
+    if (!isEpub) {
+      // Detect encoding
+      encodingName = await _textParser.detectEncodingName(file);
+
+      // Generate Chunk Offsets & Count Characters (Streamed)
+      final analysis =
+          await _textParser.analyzeFile(file, encodingName: encodingName);
+      totalChars = analysis.$1;
+      byteOffsets = analysis.$2;
+      charOffsets = analysis.$3;
+    } else {
+      // For EPUB, we don't analyze text content upfront
+      // Vocsy Epub Viewer handles pagination internally
+      totalChars = 0;
+    }
 
     // Upload to Firebase Storage if user is logged in
     String? storageUrl;
@@ -318,6 +335,107 @@ class TextBookRepository {
       }
     } catch (e) {
       debugPrint('Failed to sync position from Firestore: $e');
+    }
+  }
+
+  Future<void> syncBooksFromCloud() async {
+    if (_userId == null) return;
+
+    try {
+      // 1. Fetch all remote books
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('text_books')
+          .get();
+
+      final remoteBooks = snapshot.docs;
+
+      for (var doc in remoteBooks) {
+        final data = doc.data();
+        final String docId = doc.id;
+        final int? bookId = int.tryParse(docId);
+
+        if (bookId == null) continue;
+
+        final localBook = await _isar.textBooks.get(bookId);
+
+        if (localBook == null) {
+          // Case 1: Book exists in cloud but not locally -> Download and Add
+          final String? downloadUrl = data['filePath'];
+          final String title = data['title'] ?? 'Unknown';
+
+          if (downloadUrl != null && downloadUrl.startsWith('http')) {
+            try {
+              // Download file
+              final response = await http.get(Uri.parse(downloadUrl));
+              if (response.statusCode == 200) {
+                final appDir = await getApplicationDocumentsDirectory();
+                final file = File(
+                    '${appDir.path}/$title.txt'); // Assuming txt for now, or check extension
+                await file.writeAsBytes(response.bodyBytes);
+
+                // Create new book entry
+                final newBook = TextBook()
+                  ..id = bookId // Keep same ID
+                  ..title = title
+                  ..author = data['author']
+                  ..filePath = file.path
+                  ..encoding = data['encoding'] ?? 'UTF-8'
+                  ..totalCharacters = data['totalCharacters'] ?? 0
+                  ..currentCharPosition = data['currentPosition'] ?? 0
+                  ..currentPage = 0 // Recalculate later
+                  ..totalPages = 0
+                  ..addedAt = (data['addedAt'] as Timestamp?)?.toDate() ??
+                      DateTime.now()
+                  ..lastReadAt = (data['lastReadAt'] as Timestamp?)?.toDate() ??
+                      DateTime.now()
+                  ..fileSizeBytes = await file.length();
+
+                // If it was a shared book originally
+                if (data.containsKey('sourceId')) {
+                  newBook.sourceId = data['sourceId'];
+                  newBook.ownerId = data['ownerId'];
+                }
+
+                // Analyze file to get chunks (needed for reading)
+                // We can do this lazily or now. Doing it now ensures readiness.
+                if (!title.toLowerCase().endsWith('.epub')) {
+                  final encodingName = newBook.encoding;
+                  final analysis = await _textParser.analyzeFile(file,
+                      encodingName: encodingName);
+                  newBook.totalCharacters = analysis.$1;
+                  newBook.chunkOffsets = analysis.$2;
+                  newBook.chunkCharOffsets = analysis.$3;
+                }
+
+                await _isar.writeTxn(() async {
+                  await _isar.textBooks.put(newBook);
+                });
+              }
+            } catch (e) {
+              debugPrint('Failed to download book $title: $e');
+            }
+          }
+        } else {
+          // Case 2: Book exists locally -> Sync Progress
+          final remotePosition = data['currentPosition'] as int?;
+          final remoteLastRead = (data['lastReadAt'] as Timestamp?)?.toDate();
+
+          if (remotePosition != null && remoteLastRead != null) {
+            if (localBook.lastReadAt == null ||
+                remoteLastRead.isAfter(localBook.lastReadAt!)) {
+              localBook.currentCharPosition = remotePosition;
+              localBook.lastReadAt = remoteLastRead;
+              await _isar.writeTxn(() async {
+                await _isar.textBooks.put(localBook);
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Sync failed: $e');
     }
   }
 }

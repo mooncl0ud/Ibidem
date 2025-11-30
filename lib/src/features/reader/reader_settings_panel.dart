@@ -6,7 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_typography.dart';
-import '../../data/local/schema/reading_settings_schema.dart';
+import 'models/reading_settings_model.dart';
 import '../settings/font_repository.dart';
 import 'reading_settings_repository.dart';
 
@@ -79,6 +79,15 @@ class ReaderSettingsPanel extends ConsumerWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
+                            _ThemeButton(
+                              label: '시스템',
+                              color: Colors.grey.shade300,
+                              textColor: Colors.black,
+                              isSelected: settings.theme == 'system',
+                              onTap: () => ref
+                                  .read(readingSettingsRepositoryProvider)
+                                  .updateTheme('system'),
+                            ),
                             _ThemeButton(
                               label: '화이트',
                               color: Colors.white,
@@ -242,6 +251,18 @@ class ReaderSettingsPanel extends ConsumerWidget {
                                 .updateNavigation(volumeKeyNavEnabled: value);
                           },
                         ),
+                        // 2-Page View (only show on wide screens)
+                        if (MediaQuery.of(context).size.width > 600)
+                          SwitchListTile(
+                            title: const Text('2단 보기 (태블릿)'),
+                            subtitle: const Text('큰 화면에서 2페이지씩 표시'),
+                            value: settings.twoPageView,
+                            onChanged: (value) {
+                              ref
+                                  .read(readingSettingsRepositoryProvider)
+                                  .updateDisplay(twoPageView: value);
+                            },
+                          ),
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -296,6 +317,7 @@ class ReaderSettingsPanel extends ConsumerWidget {
                             },
                           ),
                         ),
+                        const Divider(),
                       ],
                     ),
                     loading: () =>
@@ -337,7 +359,7 @@ Future<List<String>> availableFonts(AvailableFontsRef ref) async {
 }
 
 class _FontSettingsTab extends ConsumerWidget {
-  final ReadingSettings settings;
+  final ReadingSettingsModel settings;
   const _FontSettingsTab({required this.settings});
 
   @override
@@ -370,9 +392,6 @@ class _FontSettingsTab extends ConsumerWidget {
                       // But for simplicity, let's just try to delete. Repository handles existence check.
                       if ([
                         'Noto Sans KR',
-                        'Roboto',
-                        'Gowun Batang',
-                        'Nanum Myeongjo'
                       ].contains(font)) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('기본 폰트는 삭제할 수 없습니다.')),

@@ -23,12 +23,12 @@ final readingSettingsRepositoryProvider =
 );
 
 typedef ReadingSettingsRepositoryRef = ProviderRef<ReadingSettingsRepository>;
-String _$readingSettingsHash() => r'ff50fda9768c2b175a4e959bf9f5d3333911e87f';
+String _$readingSettingsHash() => r'c7da713f13d504684572d1a1249ecf5a867d3c6a';
 
 /// See also [readingSettings].
 @ProviderFor(readingSettings)
 final readingSettingsProvider =
-    AutoDisposeStreamProvider<ReadingSettings>.internal(
+    AutoDisposeStreamProvider<ReadingSettingsModel>.internal(
   readingSettings,
   name: r'readingSettingsProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -38,6 +38,6 @@ final readingSettingsProvider =
   allTransitiveDependencies: null,
 );
 
-typedef ReadingSettingsRef = AutoDisposeStreamProviderRef<ReadingSettings>;
+typedef ReadingSettingsRef = AutoDisposeStreamProviderRef<ReadingSettingsModel>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member

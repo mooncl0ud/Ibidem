@@ -38,4 +38,5 @@ class ReadingSettings {
   late String textAlign; // "left", "justify"
   late bool autoIndent; // Default: false
   late bool paragraphSpacing; // Default: false
+  late bool twoPageView; // Default: false, for tablets
 }

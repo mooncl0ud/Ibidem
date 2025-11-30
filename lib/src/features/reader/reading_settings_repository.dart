@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../data/local/local_database_provider.dart';
 import '../../data/local/schema/reading_settings_schema.dart';
 import '../authentication/auth_repository.dart';
+import 'models/reading_settings_model.dart';
 
 part 'reading_settings_repository.g.dart';
 
@@ -15,78 +16,65 @@ class ReadingSettingsRepository {
 
   ReadingSettingsRepository(this._isar, this._firestore, this._userId);
 
-  Future<ReadingSettings> getSettings() async {
+  Future<ReadingSettingsModel> getSettings() async {
     final settings = await _isar.readingSettings.get(1);
     if (settings == null) {
       // Create default settings
-      final defaultSettings = ReadingSettings()
-        ..fontFamily = 'Noto Sans KR'
-        ..fontSize = 18.0
-        ..lineHeight = 1.6
-        ..letterSpacing = 0.0
-        ..wordScale = 1.0
-        ..theme = 'white'
-        ..customBgColor = '#FFFFFF'
-        ..customTextColor = '#121212'
-        ..tapZoneMode = 'leftRight'
-        ..touchZoneSize = 0.3
-        ..pageTransition = 'slide'
-        ..volumeKeyNavEnabled = false
-        ..orientationLock = 'none'
-        ..hideStatusBar = false
-        ..brightness = 0.5
-        ..showPageNumber = true
-        ..showClock = true
-        ..showProgressBar = true
-        ..textAlign = 'left'
-        ..autoIndent = false
-        ..paragraphSpacing = false;
-
-      await _isar.writeTxn(() async {
-        await _isar.readingSettings.put(defaultSettings);
-      });
-
+      final defaultSettings = ReadingSettingsModel.defaultSettings();
+      await _saveToIsar(defaultSettings);
       return defaultSettings;
     }
-    return settings;
+    return ReadingSettingsModel.fromSchema(settings);
   }
 
-  Stream<ReadingSettings> watchSettings() {
+  Stream<ReadingSettingsModel> watchSettings() {
     return _isar.readingSettings.watchObject(1, fireImmediately: true).map((
       settings,
     ) {
-      return settings ??
-          ReadingSettings() // Fallback if null (shouldn't happen after init)
-        ..fontFamily = 'Noto Sans KR'
-        ..fontSize = 18.0
-        ..lineHeight = 1.6
-        ..letterSpacing = 0.0
-        ..wordScale = 1.0
-        ..theme = 'white'
-        ..customBgColor = '#FFFFFF'
-        ..customTextColor = '#121212'
-        ..tapZoneMode = 'leftRight'
-        ..touchZoneSize = 0.3
-        ..pageTransition = 'slide'
-        ..volumeKeyNavEnabled = false
-        ..orientationLock = 'none'
-        ..hideStatusBar = false
-        ..brightness = 0.5
-        ..showPageNumber = true
-        ..showClock = true
-        ..showProgressBar = true
-        ..textAlign = 'left'
-        ..autoIndent = false
-        ..paragraphSpacing = false;
+      if (settings == null) {
+        return ReadingSettingsModel.defaultSettings();
+      }
+      return ReadingSettingsModel.fromSchema(settings);
     });
   }
 
-  Future<void> updateSettings(ReadingSettings settings) async {
-    await _isar.writeTxn(() async {
-      await _isar.readingSettings.put(settings);
-    });
+  Future<void> saveSettings(ReadingSettingsModel model) async {
+    debugPrint(
+        'saveSettings called: theme=${model.theme}, fontSize=${model.fontSize}, brightness=${model.brightness}');
+    await _saveToIsar(model);
+    debugPrint('Settings saved to Isar successfully');
     // Trigger sync
     syncSettingsToFirestore();
+  }
+
+  Future<void> _saveToIsar(ReadingSettingsModel model) async {
+    await _isar.writeTxn(() async {
+      final settings = await _isar.readingSettings.get(1) ?? ReadingSettings();
+      settings.fontFamily = model.fontFamily;
+      settings.fontSize = model.fontSize;
+      settings.lineHeight = model.lineHeight;
+      settings.letterSpacing = model.letterSpacing;
+      settings.wordScale = model.wordScale;
+      settings.theme = model.theme;
+      settings.customBgColor = model.customBgColor;
+      settings.customTextColor = model.customTextColor;
+      settings.tapZoneMode = model.tapZoneMode;
+      settings.touchZoneSize = model.touchZoneSize;
+      settings.pageTransition = model.pageTransition;
+      settings.volumeKeyNavEnabled = model.volumeKeyNavEnabled;
+      settings.orientationLock = model.orientationLock;
+      settings.hideStatusBar = model.hideStatusBar;
+      settings.brightness = model.brightness;
+      settings.showPageNumber = model.showPageNumber;
+      settings.showClock = model.showClock;
+      settings.showProgressBar = model.showProgressBar;
+      settings.textAlign = model.textAlign;
+      settings.autoIndent = model.autoIndent;
+      settings.paragraphSpacing = model.paragraphSpacing;
+      settings.twoPageView = model.twoPageView;
+
+      await _isar.readingSettings.put(settings);
+    });
   }
 
   Future<void> updateTypography({
@@ -96,14 +84,17 @@ class ReadingSettingsRepository {
     double? wordScale,
     String? fontFamily,
   }) async {
-    final settings = await getSettings();
-    if (fontSize != null) settings.fontSize = fontSize;
-    if (lineHeight != null) settings.lineHeight = lineHeight;
-    if (letterSpacing != null) settings.letterSpacing = letterSpacing;
-    if (wordScale != null) settings.wordScale = wordScale;
-    if (fontFamily != null) settings.fontFamily = fontFamily;
-
-    await updateSettings(settings);
+    debugPrint(
+        'updateTypography: fontSize=$fontSize, lineHeight=$lineHeight, fontFamily=$fontFamily');
+    final current = await getSettings();
+    final updated = current.copyWith(
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      letterSpacing: letterSpacing,
+      wordScale: wordScale,
+      fontFamily: fontFamily,
+    );
+    await saveSettings(updated);
   }
 
   Future<void> updateTheme(
@@ -111,12 +102,15 @@ class ReadingSettingsRepository {
     String? bgColor,
     String? textColor,
   }) async {
-    final settings = await getSettings();
-    settings.theme = theme;
-    if (bgColor != null) settings.customBgColor = bgColor;
-    if (textColor != null) settings.customTextColor = textColor;
-
-    await updateSettings(settings);
+    debugPrint(
+        'updateTheme: theme=$theme, bgColor=$bgColor, textColor=$textColor');
+    final current = await getSettings();
+    final updated = current.copyWith(
+      theme: theme,
+      customBgColor: bgColor,
+      customTextColor: textColor,
+    );
+    await saveSettings(updated);
   }
 
   Future<void> updateParagraph({
@@ -124,12 +118,14 @@ class ReadingSettingsRepository {
     bool? autoIndent,
     bool? paragraphSpacing,
   }) async {
-    final settings = await getSettings();
-    if (textAlign != null) settings.textAlign = textAlign;
-    if (autoIndent != null) settings.autoIndent = autoIndent;
-    if (paragraphSpacing != null) settings.paragraphSpacing = paragraphSpacing;
-
-    await updateSettings(settings);
+    debugPrint('updateParagraph: textAlign=$textAlign, autoIndent=$autoIndent');
+    final current = await getSettings();
+    final updated = current.copyWith(
+      textAlign: textAlign,
+      autoIndent: autoIndent,
+      paragraphSpacing: paragraphSpacing,
+    );
+    await saveSettings(updated);
   }
 
   Future<void> updateNavigation({
@@ -138,27 +134,34 @@ class ReadingSettingsRepository {
     bool? volumeKeyNavEnabled,
     double? touchZoneSize,
   }) async {
-    final settings = await getSettings();
-    if (tapZoneMode != null) settings.tapZoneMode = tapZoneMode;
-    if (pageTransition != null) settings.pageTransition = pageTransition;
-    if (volumeKeyNavEnabled != null)
-      settings.volumeKeyNavEnabled = volumeKeyNavEnabled;
-    if (touchZoneSize != null) settings.touchZoneSize = touchZoneSize;
-
-    await updateSettings(settings);
+    debugPrint(
+        'updateNavigation: pageTransition=$pageTransition, volumeKey=$volumeKeyNavEnabled, touchZoneSize=$touchZoneSize');
+    final current = await getSettings();
+    final updated = current.copyWith(
+      tapZoneMode: tapZoneMode,
+      pageTransition: pageTransition,
+      volumeKeyNavEnabled: volumeKeyNavEnabled,
+      touchZoneSize: touchZoneSize,
+    );
+    await saveSettings(updated);
   }
 
   Future<void> updateDisplay({
     String? orientationLock,
     bool? hideStatusBar,
     double? brightness,
+    bool? twoPageView,
   }) async {
-    final settings = await getSettings();
-    if (orientationLock != null) settings.orientationLock = orientationLock;
-    if (hideStatusBar != null) settings.hideStatusBar = hideStatusBar;
-    if (brightness != null) settings.brightness = brightness;
-
-    await updateSettings(settings);
+    debugPrint(
+        'updateDisplay: brightness=$brightness, orientationLock=$orientationLock, hideStatusBar=$hideStatusBar, twoPageView=$twoPageView');
+    final current = await getSettings();
+    final updated = current.copyWith(
+      orientationLock: orientationLock,
+      hideStatusBar: hideStatusBar,
+      brightness: brightness,
+      twoPageView: twoPageView,
+    );
+    await saveSettings(updated);
   }
 
   Future<void> syncSettingsToFirestore() async {
@@ -192,6 +195,7 @@ class ReadingSettingsRepository {
         'textAlign': settings.textAlign,
         'autoIndent': settings.autoIndent,
         'paragraphSpacing': settings.paragraphSpacing,
+        'twoPageView': settings.twoPageView,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -212,47 +216,34 @@ class ReadingSettingsRepository {
 
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-        final settings = await getSettings();
+        final current = await getSettings();
 
         // Update local settings
-        settings.fontFamily = data['fontFamily'] ?? settings.fontFamily;
-        settings.fontSize =
-            (data['fontSize'] as num?)?.toDouble() ?? settings.fontSize;
-        settings.lineHeight =
-            (data['lineHeight'] as num?)?.toDouble() ?? settings.lineHeight;
-        settings.letterSpacing = (data['letterSpacing'] as num?)?.toDouble() ??
-            settings.letterSpacing;
-        settings.wordScale =
-            (data['wordScale'] as num?)?.toDouble() ?? settings.wordScale;
-        settings.theme = data['theme'] ?? settings.theme;
-        settings.customBgColor =
-            data['customBgColor'] ?? settings.customBgColor;
-        settings.customTextColor =
-            data['customTextColor'] ?? settings.customTextColor;
-        settings.tapZoneMode = data['tapZoneMode'] ?? settings.tapZoneMode;
-        settings.touchZoneSize = (data['touchZoneSize'] as num?)?.toDouble() ??
-            settings.touchZoneSize;
-        settings.pageTransition =
-            data['pageTransition'] ?? settings.pageTransition;
-        settings.volumeKeyNavEnabled =
-            data['volumeKeyNavEnabled'] ?? settings.volumeKeyNavEnabled;
-        settings.orientationLock =
-            data['orientationLock'] ?? settings.orientationLock;
-        settings.hideStatusBar =
-            data['hideStatusBar'] ?? settings.hideStatusBar;
-        settings.showPageNumber =
-            data['showPageNumber'] ?? settings.showPageNumber;
-        settings.showClock = data['showClock'] ?? settings.showClock;
-        settings.showProgressBar =
-            data['showProgressBar'] ?? settings.showProgressBar;
-        settings.textAlign = data['textAlign'] ?? settings.textAlign;
-        settings.autoIndent = data['autoIndent'] ?? settings.autoIndent;
-        settings.paragraphSpacing =
-            data['paragraphSpacing'] ?? settings.paragraphSpacing;
+        final updated = current.copyWith(
+          fontFamily: data['fontFamily'],
+          fontSize: (data['fontSize'] as num?)?.toDouble(),
+          lineHeight: (data['lineHeight'] as num?)?.toDouble(),
+          letterSpacing: (data['letterSpacing'] as num?)?.toDouble(),
+          wordScale: (data['wordScale'] as num?)?.toDouble(),
+          theme: data['theme'],
+          customBgColor: data['customBgColor'],
+          customTextColor: data['customTextColor'],
+          tapZoneMode: data['tapZoneMode'],
+          touchZoneSize: (data['touchZoneSize'] as num?)?.toDouble(),
+          pageTransition: data['pageTransition'],
+          volumeKeyNavEnabled: data['volumeKeyNavEnabled'],
+          orientationLock: data['orientationLock'],
+          hideStatusBar: data['hideStatusBar'],
+          showPageNumber: data['showPageNumber'],
+          showClock: data['showClock'],
+          showProgressBar: data['showProgressBar'],
+          textAlign: data['textAlign'],
+          autoIndent: data['autoIndent'],
+          paragraphSpacing: data['paragraphSpacing'],
+          twoPageView: data['twoPageView'],
+        );
 
-        await _isar.writeTxn(() async {
-          await _isar.readingSettings.put(settings);
-        });
+        await saveSettings(updated);
       }
     } catch (e) {
       debugPrint('Failed to sync settings from Firestore: $e');
@@ -274,6 +265,6 @@ ReadingSettingsRepository readingSettingsRepository(
 }
 
 @riverpod
-Stream<ReadingSettings> readingSettings(ReadingSettingsRef ref) {
+Stream<ReadingSettingsModel> readingSettings(ReadingSettingsRef ref) {
   return ref.watch(readingSettingsRepositoryProvider).watchSettings();
 }

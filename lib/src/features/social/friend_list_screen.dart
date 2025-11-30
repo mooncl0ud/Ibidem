@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../shared/theme/app_colors.dart';
-import '../../shared/theme/app_typography.dart';
+
 import '../../shared/widgets/empty_state_widget.dart';
 import 'social_repository.dart';
 
@@ -29,9 +28,8 @@ class _FriendListScreenState extends ConsumerState<FriendListScreen> {
 
     setState(() => _isSearching = true);
     try {
-      final results = await ref
-          .read(socialRepositoryProvider)
-          .searchUsers(query);
+      final results =
+          await ref.read(socialRepositoryProvider).searchUsers(query);
       setState(() => _searchResults = results);
     } catch (e) {
       if (mounted) {

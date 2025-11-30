@@ -1,7 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:isar/isar.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../data/local/local_database_provider.dart';
 import '../authentication/auth_repository.dart';
 
 part 'note_repository.g.dart';

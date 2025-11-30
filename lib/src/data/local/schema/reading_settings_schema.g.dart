@@ -112,13 +112,18 @@ const ReadingSettingsSchema = CollectionSchema(
       name: r'touchZoneSize',
       type: IsarType.double,
     ),
-    r'volumeKeyNavEnabled': PropertySchema(
+    r'twoPageView': PropertySchema(
       id: 19,
+      name: r'twoPageView',
+      type: IsarType.bool,
+    ),
+    r'volumeKeyNavEnabled': PropertySchema(
+      id: 20,
       name: r'volumeKeyNavEnabled',
       type: IsarType.bool,
     ),
     r'wordScale': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'wordScale',
       type: IsarType.double,
     )
@@ -179,8 +184,9 @@ void _readingSettingsSerialize(
   writer.writeString(offsets[16], object.textAlign);
   writer.writeString(offsets[17], object.theme);
   writer.writeDouble(offsets[18], object.touchZoneSize);
-  writer.writeBool(offsets[19], object.volumeKeyNavEnabled);
-  writer.writeDouble(offsets[20], object.wordScale);
+  writer.writeBool(offsets[19], object.twoPageView);
+  writer.writeBool(offsets[20], object.volumeKeyNavEnabled);
+  writer.writeDouble(offsets[21], object.wordScale);
 }
 
 ReadingSettings _readingSettingsDeserialize(
@@ -210,8 +216,9 @@ ReadingSettings _readingSettingsDeserialize(
   object.textAlign = reader.readString(offsets[16]);
   object.theme = reader.readString(offsets[17]);
   object.touchZoneSize = reader.readDouble(offsets[18]);
-  object.volumeKeyNavEnabled = reader.readBool(offsets[19]);
-  object.wordScale = reader.readDouble(offsets[20]);
+  object.twoPageView = reader.readBool(offsets[19]);
+  object.volumeKeyNavEnabled = reader.readBool(offsets[20]);
+  object.wordScale = reader.readDouble(offsets[21]);
   return object;
 }
 
@@ -263,6 +270,8 @@ P _readingSettingsDeserializeProp<P>(
     case 19:
       return (reader.readBool(offset)) as P;
     case 20:
+      return (reader.readBool(offset)) as P;
+    case 21:
       return (reader.readDouble(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1899,6 +1908,16 @@ extension ReadingSettingsQueryFilter
   }
 
   QueryBuilder<ReadingSettings, ReadingSettings, QAfterFilterCondition>
+      twoPageViewEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'twoPageView',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ReadingSettings, ReadingSettings, QAfterFilterCondition>
       volumeKeyNavEnabledEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -2249,6 +2268,20 @@ extension ReadingSettingsQuerySortBy
   }
 
   QueryBuilder<ReadingSettings, ReadingSettings, QAfterSortBy>
+      sortByTwoPageView() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'twoPageView', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ReadingSettings, ReadingSettings, QAfterSortBy>
+      sortByTwoPageViewDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'twoPageView', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ReadingSettings, ReadingSettings, QAfterSortBy>
       sortByVolumeKeyNavEnabled() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'volumeKeyNavEnabled', Sort.asc);
@@ -2557,6 +2590,20 @@ extension ReadingSettingsQuerySortThenBy
   }
 
   QueryBuilder<ReadingSettings, ReadingSettings, QAfterSortBy>
+      thenByTwoPageView() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'twoPageView', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ReadingSettings, ReadingSettings, QAfterSortBy>
+      thenByTwoPageViewDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'twoPageView', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ReadingSettings, ReadingSettings, QAfterSortBy>
       thenByVolumeKeyNavEnabled() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'volumeKeyNavEnabled', Sort.asc);
@@ -2725,6 +2772,13 @@ extension ReadingSettingsQueryWhereDistinct
   }
 
   QueryBuilder<ReadingSettings, ReadingSettings, QDistinct>
+      distinctByTwoPageView() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'twoPageView');
+    });
+  }
+
+  QueryBuilder<ReadingSettings, ReadingSettings, QDistinct>
       distinctByVolumeKeyNavEnabled() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'volumeKeyNavEnabled');
@@ -2869,6 +2923,12 @@ extension ReadingSettingsQueryProperty
       touchZoneSizeProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'touchZoneSize');
+    });
+  }
+
+  QueryBuilder<ReadingSettings, bool, QQueryOperations> twoPageViewProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'twoPageView');
     });
   }
 

@@ -24,11 +24,13 @@ void main() async {
   );
 }
 
-class IbidemApp extends StatelessWidget {
+class IbidemApp extends ConsumerWidget {
   const IbidemApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+
     return MaterialApp.router(
       title: 'IBIDEM',
       theme: AppTheme.lightTheme,

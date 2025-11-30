@@ -6,7 +6,7 @@ part of 'reader_settings_panel.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$availableFontsHash() => r'06b77fecf1c48e22fd515b81a62b2ddc3daccf13';
+String _$availableFontsHash() => r'e21e17fb237b12659e58e2eb718ba6f4d1c6be61';
 
 /// See also [availableFonts].
 @ProviderFor(availableFonts)

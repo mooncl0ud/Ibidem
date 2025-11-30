@@ -10,7 +10,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../data/local/schema/reading_settings_schema.dart';
+import 'models/reading_settings_model.dart';
 import '../../data/local/schema/text_book_schema.dart';
 import '../../data/local/schema/highlight_schema.dart';
 import '../library/text_book_repository.dart';
@@ -49,6 +49,7 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
 
   // Sticky Notes
   bool _isAddingNote = false;
+  bool _isStickyNoteMode = false;
   Offset? _notePosition;
 
   final ScrollController _scrollController = ScrollController();
@@ -64,11 +65,16 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
   }
 
   @override
+  void deactivate() {
+    _syncData();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _debounceTimer?.cancel();
     _scrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _syncData(); // Sync on exit
     WakelockPlus.disable();
     ScreenBrightness().resetScreenBrightness();
     SystemChrome.setPreferredOrientations([]);
@@ -81,6 +87,16 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _syncData();
+    }
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    final settings = ref.read(readingSettingsProvider).value;
+    if (settings?.theme == 'system') {
+      setState(() {
+        // Trigger rebuild to pick up new system brightness
+      });
     }
   }
 
@@ -120,7 +136,7 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
     }
   }
 
-  Future<void> _paginateChunk(ReadingSettings settings) async {
+  Future<void> _paginateChunk(ReadingSettingsModel settings) async {
     if (_book == null) return;
     if (_isPaginationInProgress) return;
     _isPaginationInProgress = true;
@@ -183,7 +199,13 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
           size.height - safePadding.top - safePadding.bottom - 20;
 
       // Use full screen width (minus padding handled by parser)
-      final paginateSize = Size(size.width, availableHeight);
+      // Handle 2-Page View
+      double pageWidth = size.width;
+      if (settings.twoPageView && size.width > 600) {
+        pageWidth = size.width / 2;
+      }
+
+      final paginateSize = Size(pageWidth, availableHeight);
 
       // Standard visual padding
       // Increased bottom padding to 60 to avoid overlap with footer (Page Number/Clock)
@@ -227,6 +249,9 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
       _currentPageIndex = targetPage;
 
       setState(() {});
+    } catch (e, stack) {
+      debugPrint('Pagination Error: $e');
+      debugPrint(stack.toString());
     } finally {
       _isPaginationInProgress = false;
     }
@@ -274,7 +299,17 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
         await _loadChunk(_currentChunkIndex - 1);
         // Go to last page of new chunk
         if (_pages.isNotEmpty) {
-          _onPageChanged(_pages.length - 1);
+          final settings = ref.read(readingSettingsProvider).value;
+          final isTwoPage = settings?.twoPageView == true &&
+              MediaQuery.of(context).size.width > 600;
+
+          if (isTwoPage) {
+            // Go to last pair
+            final lastIndex = _pages.length - 1;
+            _onPageChanged(lastIndex % 2 == 0 ? lastIndex : lastIndex - 1);
+          } else {
+            _onPageChanged(_pages.length - 1);
+          }
         }
       }
       return;
@@ -343,6 +378,54 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
 
   void _toggleMenu() {
     setState(() => _showMenu = !_showMenu);
+  }
+
+  void _handleTap(TapUpDetails details, BuildContext context,
+      ReadingSettingsModel settings) {
+    if (_showMenu) {
+      debugPrint('Menu is open, toggling menu');
+      _toggleMenu();
+      return;
+    }
+
+    if (_isStickyNoteMode) {
+      _addStickyNote(details);
+      return;
+    }
+
+    final width = MediaQuery.of(context).size.width;
+    final dx = details.globalPosition.dx;
+    debugPrint('Tap at dx: $dx, width: $width');
+
+    // Calculate zones based on settings
+    // Default touchZoneSize is 0.3 (30% of screen width for center)
+    final zoneSize = settings.touchZoneSize;
+    final centerStart = width * (0.5 - (zoneSize / 2));
+    final centerEnd = width * (0.5 + (zoneSize / 2));
+
+    if (dx > centerStart && dx < centerEnd) {
+      _toggleMenu();
+      return;
+    }
+
+    // Navigation
+    // For now, assuming leftRight mode (Left=Prev, Right=Next)
+    // TODO: Handle 'reverse' or 'topBottom' if implemented
+    final isTwoPage =
+        settings.twoPageView && MediaQuery.of(context).size.width > 600;
+    final step = isTwoPage ? 2 : 1;
+
+    if (dx <= centerStart) {
+      // Previous
+      if (_currentPageIndex > 0) {
+        _onPageChanged(_currentPageIndex - step);
+      }
+    } else {
+      // Next
+      if (_currentPageIndex < _pages.length - 1) {
+        _onPageChanged(_currentPageIndex + step);
+      }
+    }
   }
 
   void _sharePage() {
@@ -444,7 +527,7 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
 
   Widget _buildPageContent(
     BuildContext context,
-    ReadingSettings settings,
+    ReadingSettingsModel settings,
     Color bgColor,
     Color textColor,
   ) {
@@ -474,7 +557,10 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
             },
             child: ListView.builder(
               controller: _scrollController,
-              itemCount: _pages.length,
+              itemCount: settings.twoPageView &&
+                      MediaQuery.of(context).size.width > 600
+                  ? (_pages.length / 2).ceil()
+                  : _pages.length,
               itemExtent: constraints.maxHeight,
               physics: const BouncingScrollPhysics(),
               itemBuilder: (context, index) {
@@ -484,6 +570,8 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                   bgColor,
                   textColor,
                   index,
+                  isTwoPage: settings.twoPageView &&
+                      MediaQuery.of(context).size.width > 600,
                 );
               },
             ),
@@ -495,11 +583,17 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
         onHorizontalDragEnd: (details) {
           if (details.primaryVelocity! > 0) {
             // Swipe Right -> Previous
-            if (_currentPageIndex > 0) _onPageChanged(_currentPageIndex - 1);
+            final isTwoPage =
+                settings.twoPageView && MediaQuery.of(context).size.width > 600;
+            final step = isTwoPage ? 2 : 1;
+            if (_currentPageIndex > 0) _onPageChanged(_currentPageIndex - step);
           } else if (details.primaryVelocity! < 0) {
             // Swipe Left -> Next
+            final isTwoPage =
+                settings.twoPageView && MediaQuery.of(context).size.width > 600;
+            final step = isTwoPage ? 2 : 1;
             if (_currentPageIndex < _pages.length - 1)
-              _onPageChanged(_currentPageIndex + 1);
+              _onPageChanged(_currentPageIndex + step);
           }
         },
         child: AnimatedSwitcher(
@@ -519,6 +613,8 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
             bgColor,
             textColor,
             _currentPageIndex,
+            isTwoPage:
+                settings.twoPageView && MediaQuery.of(context).size.width > 600,
           ),
         ),
       );
@@ -551,6 +647,8 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
           bgColor,
           textColor,
           _currentPageIndex,
+          isTwoPage:
+              settings.twoPageView && MediaQuery.of(context).size.width > 600,
         ),
       );
     }
@@ -583,32 +681,109 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
 
   Widget _buildSinglePage(
     BuildContext context,
-    ReadingSettings settings,
+    ReadingSettingsModel settings,
     Color bgColor,
     Color textColor,
     int pageIndex, {
     Key? key,
+    bool isTwoPage = false,
   }) {
+    final settingsKey =
+        '${settings.theme}_${settings.fontSize.toStringAsFixed(1)}_${settings.fontFamily}';
+
+    if (isTwoPage) {
+      // Create composite key including critical settings to force rebuild on changes
+      // If we use itemExtent, we are scrolling item by item.
+      // So index 0 = page 0 & 1.
+      // For AnimatedSwitcher, _currentPageIndex is the current page index.
+      // We should ensure _currentPageIndex is always even in 2-page mode?
+      // Or just render _currentPageIndex and _currentPageIndex + 1.
+
+      // Let's normalize pageIndex to be even
+      final leftIndex = pageIndex % 2 == 0 ? pageIndex : pageIndex - 1;
+      final rightIndex = leftIndex + 1;
+
+      return Container(
+        key: key ?? ValueKey('$leftIndex-$settingsKey'),
+        color: bgColor,
+        width: double.infinity,
+        height: double.infinity,
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildSinglePageContent(
+                context,
+                settings,
+                bgColor,
+                textColor,
+                leftIndex,
+                showBorder: true,
+              ),
+            ),
+            Expanded(
+              child: rightIndex < _pages.length
+                  ? _buildSinglePageContent(
+                      context,
+                      settings,
+                      bgColor,
+                      textColor,
+                      rightIndex,
+                    )
+                  : Container(color: bgColor),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _buildSinglePageContent(
+      context,
+      settings,
+      bgColor,
+      textColor,
+      pageIndex,
+      key: key,
+    );
+  }
+
+  Widget _buildSinglePageContent(
+    BuildContext context,
+    ReadingSettingsModel settings,
+    Color bgColor,
+    Color textColor,
+    int pageIndex, {
+    Key? key,
+    bool showBorder = false,
+  }) {
+    final settingsKey =
+        '${settings.theme}_${settings.fontSize.toStringAsFixed(1)}_${settings.fontFamily}';
+
     return Container(
-      key: key ?? ValueKey(pageIndex),
+      key: key ?? ValueKey('$pageIndex-$settingsKey'),
       color: bgColor,
       width: double.infinity,
       height: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 60),
+      decoration: showBorder
+          ? BoxDecoration(
+              border: Border(
+                right: BorderSide(color: Colors.grey.withOpacity(0.2)),
+              ),
+            )
+          : null,
       child: Consumer(
         builder: (context, ref, child) {
           final highlightsAsync = _book != null
               ? ref.watch(highlightsStreamProvider(_book!.id))
               : const AsyncValue.data(<Highlight>[]);
 
-          return Stack(
-            children: [
-              SelectionArea(
-                child: RichText(
-                  textAlign: settings.textAlign == 'justify'
-                      ? TextAlign.justify
-                      : TextAlign.left,
-                  text: highlightsAsync.when(
+          return GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTapUp: (details) => _handleTap(details, context, settings),
+            child: Stack(
+              children: [
+                SelectableText.rich(
+                  highlightsAsync.when(
                     data: (highlights) {
                       final chunkGlobalOffset =
                           (_book!.chunkCharOffsets != null &&
@@ -651,9 +826,12 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                       ),
                     ),
                   ),
+                  textAlign: settings.textAlign == 'justify'
+                      ? TextAlign.justify
+                      : TextAlign.left,
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -771,27 +949,36 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
       builder: (context) => StickyNoteDialog(
         isEditable: true,
         onSave: (content, color) {
-          if (_book != null &&
-              _book!.ownerId != null &&
-              _book!.sourceId != null) {
-            ref.read(stickyNoteRepositoryProvider).addNote(
-                  ownerId: _book!.ownerId!,
-                  bookId: _book!.sourceId!,
-                  pageIndex: _currentPageIndex,
-                  x: _notePosition!.dx,
-                  y: _notePosition!.dy,
-                  content: content,
-                  color: color,
-                );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('공유된 책에서만 포스트잇을 사용할 수 있습니다.')),
-            );
+          if (_book != null) {
+            final currentUser = ref.read(authRepositoryProvider).currentUser;
+            final ownerId = _book!.ownerId ?? currentUser?.uid;
+            final bookId = _book!.sourceId ?? _book!.id.toString();
+
+            if (ownerId != null) {
+              ref.read(stickyNoteRepositoryProvider).addNote(
+                    ownerId: ownerId,
+                    bookId: bookId,
+                    pageIndex: _currentPageIndex,
+                    x: _notePosition!.dx,
+                    y: _notePosition!.dy,
+                    content: content,
+                    color: color,
+                  );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('로그인이 필요합니다.')),
+              );
+            }
           }
         },
       ),
     ).then((_) {
-      if (_isAddingNote) setState(() => _isAddingNote = false);
+      if (_isAddingNote) {
+        setState(() {
+          _isAddingNote = false;
+          _isStickyNoteMode = false; // Auto-exit sticky note mode
+        });
+      }
     });
   }
 
@@ -799,17 +986,64 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(readingSettingsProvider);
 
-    // Listen for settings changes to re-paginate
+    // Listen for settings changes to re-paginate or update UI
     ref.listen(readingSettingsProvider, (previous, next) {
       next.whenData((settings) {
-        previous?.whenData((prevSettings) {
-          if (settings.fontSize != prevSettings.fontSize ||
+        if (previous == null) {
+          debugPrint('Settings changed: previous is null, skipping comparison');
+          return;
+        }
+
+        previous.whenData((prevSettings) {
+          debugPrint('Settings changed: checking if pagination is needed');
+          debugPrint(
+              'Previous theme: ${prevSettings.theme}, New theme: ${settings.theme}');
+          debugPrint(
+              'Previous fontSize: ${prevSettings.fontSize}, New fontSize: ${settings.fontSize}');
+          debugPrint(
+              'Previous brightness: ${prevSettings.brightness}, New brightness: ${settings.brightness}');
+
+          // Check if pagination is needed
+          bool needsPagination = settings.fontSize != prevSettings.fontSize ||
               settings.lineHeight != prevSettings.lineHeight ||
               settings.fontFamily != prevSettings.fontFamily ||
               settings.letterSpacing != prevSettings.letterSpacing ||
               settings.textAlign != prevSettings.textAlign ||
-              settings.autoIndent != prevSettings.autoIndent) {
+              settings.autoIndent != prevSettings.autoIndent ||
+              settings.twoPageView != prevSettings.twoPageView;
+
+          // Check if any other settings changed (theme, brightness, transitions, etc.)
+          bool settingsChanged = needsPagination ||
+              settings.theme != prevSettings.theme ||
+              settings.customBgColor != prevSettings.customBgColor ||
+              settings.customTextColor != prevSettings.customTextColor ||
+              settings.brightness != prevSettings.brightness ||
+              settings.pageTransition != prevSettings.pageTransition ||
+              settings.touchZoneSize != prevSettings.touchZoneSize ||
+              settings.volumeKeyNavEnabled !=
+                  prevSettings.volumeKeyNavEnabled ||
+              settings.orientationLock != prevSettings.orientationLock ||
+              settings.hideStatusBar != prevSettings.hideStatusBar ||
+              settings.showPageNumber != prevSettings.showPageNumber ||
+              settings.showClock != prevSettings.showClock ||
+              settings.showProgressBar != prevSettings.showProgressBar;
+
+          debugPrint(
+              'needsPagination: $needsPagination, settingsChanged: $settingsChanged');
+
+          if (needsPagination) {
+            debugPrint('Pagination needed. Applying new settings...');
             _paginateChunk(settings);
+          } else if (settingsChanged) {
+            debugPrint('Settings changed, forcing UI rebuild...');
+            // Force rebuild for visual-only changes
+            if (mounted) {
+              setState(() {
+                // Just trigger rebuild, state is already updated via provider
+              });
+            }
+          } else {
+            debugPrint('Settings changed but no action needed.');
           }
         });
       });
@@ -886,6 +1120,16 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
             bgColor = Colors.black;
             textColor = Colors.grey;
             break;
+          case 'system':
+            final brightness = MediaQuery.platformBrightnessOf(context);
+            if (brightness == Brightness.dark) {
+              bgColor = const Color(0xFF1E1E1E);
+              textColor = const Color(0xFFE0E0E0);
+            } else {
+              bgColor = Colors.white;
+              textColor = Colors.black87;
+            }
+            break;
           default:
             // Custom
             try {
@@ -945,49 +1189,27 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
             child: SafeArea(
               child: Stack(
                 children: [
-                  GestureDetector(
-                    onTapUp: (details) {
-                      final width = MediaQuery.of(context).size.width;
-                      final touchZone = width * settings.touchZoneSize;
-                      if (details.globalPosition.dx < touchZone) {
-                        if (_currentPageIndex > 0)
-                          _onPageChanged(_currentPageIndex - 1);
-                      } else if (details.globalPosition.dx >
-                          width - touchZone) {
-                        if (_currentPageIndex < _pages.length - 1)
-                          _onPageChanged(_currentPageIndex + 1);
-                      } else {
-                        _toggleMenu();
-                      }
-                    },
-                    onLongPressStart: (details) {
-                      // Long press to add sticky note
-                      _addStickyNote(
-                        TapUpDetails(
-                          kind: PointerDeviceKind.touch,
-                          globalPosition: details.globalPosition,
-                          localPosition: details.localPosition,
-                        ),
-                      );
-                    },
-                    child: _buildPageContent(
-                        context, settings, bgColor, textColor),
-                  ),
+                  _buildPageContent(context, settings, bgColor, textColor),
 
                   // Sticky Notes Overlay (Only for non-scroll/flip modes or handle separately)
                   // For Scroll/Flip, we might need to integrate notes into the page builder
                   // But for now, let's keep it simple.
                   if (settings.pageTransition != 'scroll' &&
                       settings.pageTransition != 'flip' &&
-                      _book != null &&
-                      _book!.ownerId != null &&
-                      _book!.sourceId != null)
+                      _book != null)
                     Consumer(
                       builder: (context, ref, child) {
+                        final currentUser =
+                            ref.watch(authRepositoryProvider).currentUser;
+                        final ownerId = _book!.ownerId ?? currentUser?.uid;
+                        final bookId = _book!.sourceId ?? _book!.id.toString();
+
+                        if (ownerId == null) return const SizedBox.shrink();
+
                         final notesAsync = ref.watch(
                           stickyNotesStreamProvider(
-                            ownerId: _book!.ownerId!,
-                            bookId: _book!.sourceId!,
+                            ownerId: ownerId,
+                            bookId: bookId,
                           ),
                         );
 
@@ -1016,28 +1238,48 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                                                   .currentUser
                                                   ?.uid,
                                           onSave: (content, color) {
-                                            ref
-                                                .read(
-                                                  stickyNoteRepositoryProvider,
-                                                )
-                                                .updateNote(
-                                                  ownerId: _book!.ownerId!,
-                                                  bookId: _book!.sourceId!,
-                                                  noteId: note.id,
-                                                  content: content,
-                                                  color: color,
-                                                );
+                                            final currentUser = ref
+                                                .read(authRepositoryProvider)
+                                                .currentUser;
+                                            final ownerId = _book!.ownerId ??
+                                                currentUser?.uid;
+                                            final bookId = _book!.sourceId ??
+                                                _book!.id.toString();
+
+                                            if (ownerId != null) {
+                                              ref
+                                                  .read(
+                                                    stickyNoteRepositoryProvider,
+                                                  )
+                                                  .updateNote(
+                                                    ownerId: ownerId,
+                                                    bookId: bookId,
+                                                    noteId: note.id,
+                                                    content: content,
+                                                    color: color,
+                                                  );
+                                            }
                                           },
                                           onDelete: () {
-                                            ref
-                                                .read(
-                                                  stickyNoteRepositoryProvider,
-                                                )
-                                                .deleteNote(
-                                                  ownerId: _book!.ownerId!,
-                                                  bookId: _book!.sourceId!,
-                                                  noteId: note.id,
-                                                );
+                                            final currentUser = ref
+                                                .read(authRepositoryProvider)
+                                                .currentUser;
+                                            final ownerId = _book!.ownerId ??
+                                                currentUser?.uid;
+                                            final bookId = _book!.sourceId ??
+                                                _book!.id.toString();
+
+                                            if (ownerId != null) {
+                                              ref
+                                                  .read(
+                                                    stickyNoteRepositoryProvider,
+                                                  )
+                                                  .deleteNote(
+                                                    ownerId: ownerId,
+                                                    bookId: bookId,
+                                                    noteId: note.id,
+                                                  );
+                                            }
                                             Navigator.pop(context);
                                           },
                                         ),
@@ -1159,6 +1401,28 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                           IconButton(
                             icon: const Icon(Icons.settings),
                             onPressed: _showSettingsPanel,
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              _isStickyNoteMode
+                                  ? Icons.note_add
+                                  : Icons.note_add_outlined,
+                              color:
+                                  _isStickyNoteMode ? Colors.amber : textColor,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isStickyNoteMode = !_isStickyNoteMode;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(_isStickyNoteMode
+                                      ? '포스트잇 모드: 화면을 탭하여 메모를 추가하세요'
+                                      : '포스트잇 모드 해제'),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
