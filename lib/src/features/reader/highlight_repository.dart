@@ -51,12 +51,24 @@ class HighlightRepository {
     await _isar.writeTxn(() async {
       await _isar.highlights.put(highlight);
     });
+
+    // Auto-sync to Firestore
+    await syncHighlights(bookId);
   }
 
   Future<void> removeHighlight(int id) async {
+    // Get bookId before deleting
+    final highlight = await _isar.highlights.get(id);
+    final bookId = highlight?.bookId;
+
     await _isar.writeTxn(() async {
       await _isar.highlights.delete(id);
     });
+
+    // Auto-sync to Firestore if bookId exists
+    if (bookId != null) {
+      await syncHighlights(bookId);
+    }
   }
 
   Future<List<Highlight>> getHighlights(int bookId) async {
@@ -138,13 +150,13 @@ class HighlightRepository {
               .doc(bookId.toString())
               .collection('highlights')
               .add({
-                'startPosition': local.startPosition,
-                'endPosition': local.endPosition,
-                'highlightedText': local.highlightedText,
-                'color': local.color,
-                'note': local.note,
-                'createdAt': Timestamp.fromDate(local.createdAt),
-              });
+            'startPosition': local.startPosition,
+            'endPosition': local.endPosition,
+            'highlightedText': local.highlightedText,
+            'color': local.color,
+            'note': local.note,
+            'createdAt': Timestamp.fromDate(local.createdAt),
+          });
         }
       }
     } catch (e) {

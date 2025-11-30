@@ -52,6 +52,9 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
   bool _isStickyNoteMode = false;
   Offset? _notePosition;
 
+  // Text Selection Mode
+  bool _isTextSelectionMode = false;
+
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -779,57 +782,182 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
 
           return GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTapUp: (details) => _handleTap(details, context, settings),
+            onTapUp: _isTextSelectionMode
+                ? null
+                : (details) => _handleTap(details, context, settings),
             child: Stack(
               children: [
-                SelectableText.rich(
-                  highlightsAsync.when(
-                    data: (highlights) {
-                      final chunkGlobalOffset =
-                          (_book!.chunkCharOffsets != null &&
-                                  _book!.chunkCharOffsets!.isNotEmpty)
-                              ? _book!.chunkCharOffsets![_currentChunkIndex]
-                              : 0;
+                _isTextSelectionMode
+                    ? SelectableText.rich(
+                        highlightsAsync.when(
+                          data: (highlights) {
+                            final chunkGlobalOffset =
+                                (_book!.chunkCharOffsets != null &&
+                                        _book!.chunkCharOffsets!.isNotEmpty)
+                                    ? _book!
+                                        .chunkCharOffsets![_currentChunkIndex]
+                                    : 0;
 
-                      return _buildRichText(
-                        _pages[pageIndex].text,
-                        _pages[pageIndex].startIndex,
-                        highlights,
-                        TextStyle(
-                          fontSize: settings.fontSize,
-                          height: settings.lineHeight,
-                          fontFamily: settings.fontFamily,
-                          letterSpacing: settings.letterSpacing,
-                          color: textColor,
+                            return _buildRichText(
+                              _pages[pageIndex].text,
+                              _pages[pageIndex].startIndex,
+                              highlights,
+                              TextStyle(
+                                fontSize: settings.fontSize,
+                                height: settings.lineHeight,
+                                fontFamily: settings.fontFamily,
+                                letterSpacing: settings.letterSpacing,
+                                color: textColor,
+                              ),
+                              chunkGlobalOffset,
+                            );
+                          },
+                          loading: () => TextSpan(
+                            text: _pages[pageIndex].text,
+                            style: TextStyle(
+                              fontSize: settings.fontSize,
+                              height: settings.lineHeight,
+                              fontFamily: settings.fontFamily,
+                              letterSpacing: settings.letterSpacing,
+                              color: textColor,
+                            ),
+                          ),
+                          error: (_, __) => TextSpan(
+                            text: _pages[pageIndex].text,
+                            style: TextStyle(
+                              fontSize: settings.fontSize,
+                              height: settings.lineHeight,
+                              fontFamily: settings.fontFamily,
+                              letterSpacing: settings.letterSpacing,
+                              color: textColor,
+                            ),
+                          ),
                         ),
-                        chunkGlobalOffset,
-                      );
-                    },
-                    loading: () => TextSpan(
-                      text: _pages[pageIndex].text,
-                      style: TextStyle(
-                        fontSize: settings.fontSize,
-                        height: settings.lineHeight,
-                        fontFamily: settings.fontFamily,
-                        letterSpacing: settings.letterSpacing,
-                        color: textColor,
+                        textAlign: settings.textAlign == 'justify'
+                            ? TextAlign.justify
+                            : TextAlign.left,
+                        contextMenuBuilder: (context, editableTextState) {
+                          final List<ContextMenuButtonItem> buttonItems = [
+                            ContextMenuButtonItem(
+                              label: '복사',
+                              onPressed: () {
+                                editableTextState.copySelection(
+                                    SelectionChangedCause.toolbar);
+                                editableTextState.hideToolbar();
+                              },
+                            ),
+                            ContextMenuButtonItem(
+                              label: '전체 선택',
+                              onPressed: () {
+                                editableTextState
+                                    .selectAll(SelectionChangedCause.toolbar);
+                              },
+                            ),
+                            ContextMenuButtonItem(
+                              label: '하이라이트 추가',
+                              onPressed: () {
+                                final selectedText = editableTextState
+                                    .textEditingValue.selection
+                                    .textInside(editableTextState
+                                        .textEditingValue.text);
+
+                                if (selectedText.isNotEmpty && _book != null) {
+                                  // Calculate positions
+                                  final selection = editableTextState
+                                      .textEditingValue.selection;
+                                  final pageStartIndex =
+                                      _pages[pageIndex].startIndex;
+                                  final chunkGlobalOffset = (_book!
+                                                  .chunkCharOffsets !=
+                                              null &&
+                                          _book!.chunkCharOffsets!.isNotEmpty)
+                                      ? _book!
+                                          .chunkCharOffsets![_currentChunkIndex]
+                                      : 0;
+
+                                  final globalStart = chunkGlobalOffset +
+                                      pageStartIndex +
+                                      selection.start;
+                                  final globalEnd = chunkGlobalOffset +
+                                      pageStartIndex +
+                                      selection.end;
+
+                                  // Add highlight
+                                  ref
+                                      .read(highlightRepositoryProvider)
+                                      .addHighlight(
+                                        bookId: _book!.id,
+                                        startPosition: globalStart,
+                                        endPosition: globalEnd,
+                                        highlightedText: selectedText,
+                                        color: '#FFFF00', // Yellow
+                                      );
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('하이라이트가 추가되었습니다')),
+                                  );
+                                }
+                                editableTextState.hideToolbar();
+                              },
+                            ),
+                          ];
+
+                          return AdaptiveTextSelectionToolbar.buttonItems(
+                            anchors: editableTextState.contextMenuAnchors,
+                            buttonItems: buttonItems,
+                          );
+                        },
+                      )
+                    : RichText(
+                        textAlign: settings.textAlign == 'justify'
+                            ? TextAlign.justify
+                            : TextAlign.left,
+                        text: highlightsAsync.when(
+                          data: (highlights) {
+                            final chunkGlobalOffset =
+                                (_book!.chunkCharOffsets != null &&
+                                        _book!.chunkCharOffsets!.isNotEmpty)
+                                    ? _book!
+                                        .chunkCharOffsets![_currentChunkIndex]
+                                    : 0;
+
+                            return _buildRichText(
+                              _pages[pageIndex].text,
+                              _pages[pageIndex].startIndex,
+                              highlights,
+                              TextStyle(
+                                fontSize: settings.fontSize,
+                                height: settings.lineHeight,
+                                fontFamily: settings.fontFamily,
+                                letterSpacing: settings.letterSpacing,
+                                color: textColor,
+                              ),
+                              chunkGlobalOffset,
+                            );
+                          },
+                          loading: () => TextSpan(
+                            text: _pages[pageIndex].text,
+                            style: TextStyle(
+                              fontSize: settings.fontSize,
+                              height: settings.lineHeight,
+                              fontFamily: settings.fontFamily,
+                              letterSpacing: settings.letterSpacing,
+                              color: textColor,
+                            ),
+                          ),
+                          error: (_, __) => TextSpan(
+                            text: _pages[pageIndex].text,
+                            style: TextStyle(
+                              fontSize: settings.fontSize,
+                              height: settings.lineHeight,
+                              fontFamily: settings.fontFamily,
+                              letterSpacing: settings.letterSpacing,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    error: (_, __) => TextSpan(
-                      text: _pages[pageIndex].text,
-                      style: TextStyle(
-                        fontSize: settings.fontSize,
-                        height: settings.lineHeight,
-                        fontFamily: settings.fontFamily,
-                        letterSpacing: settings.letterSpacing,
-                        color: textColor,
-                      ),
-                    ),
-                  ),
-                  textAlign: settings.textAlign == 'justify'
-                      ? TextAlign.justify
-                      : TextAlign.left,
-                ),
               ],
             ),
           );
@@ -1401,6 +1529,29 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                           IconButton(
                             icon: const Icon(Icons.settings),
                             onPressed: _showSettingsPanel,
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              _isTextSelectionMode
+                                  ? Icons.text_fields
+                                  : Icons.text_fields_outlined,
+                              color: _isTextSelectionMode
+                                  ? Colors.blue
+                                  : textColor,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isTextSelectionMode = !_isTextSelectionMode;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(_isTextSelectionMode
+                                      ? '텍스트 선택 모드: 텍스트를 선택할 수 있습니다'
+                                      : '텍스트 선택 모드 해제'),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            },
                           ),
                           IconButton(
                             icon: Icon(

@@ -11,6 +11,7 @@ import '../social/social_repository.dart';
 import 'friend_library_screen.dart';
 import '../social/inbox_repository.dart';
 import '../authentication/auth_repository.dart';
+import '../reader/highlight_repository.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
@@ -58,7 +59,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('IBIDEM'),
@@ -166,6 +167,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   tabs: [
                     Tab(text: '내 서재'),
                     Tab(text: '공유 서재'),
+                    Tab(text: '하이라이트'),
                   ],
                 ),
                 Padding(
@@ -207,6 +209,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               onImport: _importBook,
             ),
             const _SharedLibraryTab(),
+            const _HighlightsTab(),
           ],
         ),
         floatingActionButton: FloatingActionButton(
@@ -447,6 +450,225 @@ class _SharedLibraryTab extends ConsumerWidget {
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, stack) => Center(child: Text('Error: $err')),
+    );
+  }
+}
+
+class _HighlightsTab extends ConsumerWidget {
+  const _HighlightsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final booksAsync = ref.watch(textBooksProvider);
+    final currentUser = ref.watch(authRepositoryProvider).currentUser;
+
+    if (currentUser == null) {
+      return const Center(
+        child: Text('로그인이 필요합니다.'),
+      );
+    }
+
+    return booksAsync.when(
+      data: (books) {
+        if (books.isEmpty) {
+          return const Center(
+            child: Text('책이 없습니다.'),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: books.length,
+          itemBuilder: (context, index) {
+            final book = books[index];
+            return Consumer(
+              builder: (context, ref, child) {
+                final highlightsAsync =
+                    ref.watch(highlightsStreamProvider(book.id));
+
+                return highlightsAsync.when(
+                  data: (highlights) {
+                    if (highlights.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: ExpansionTile(
+                        title: Text(
+                          book.title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text('${highlights.length}개의 하이라이트'),
+                        children: highlights.map((highlight) {
+                          return ListTile(
+                            title: Text(
+                              highlight.highlightedText,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            leading: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Color(
+                                  int.parse(highlight.color.substring(1),
+                                          radix: 16) +
+                                      0xFF000000,
+                                ).withOpacity(0.5),
+                                border: Border.all(color: Colors.grey),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.palette, size: 20),
+                                  onPressed: () async {
+                                    // Show color picker
+                                    final newColor = await showDialog<String>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('하이라이트 색상 변경'),
+                                        content: Wrap(
+                                          spacing: 12,
+                                          runSpacing: 12,
+                                          children: [
+                                            _buildColorChip(
+                                                context, '노란색', '#FFFF00'),
+                                            _buildColorChip(
+                                                context, '초록색', '#00FF00'),
+                                            _buildColorChip(
+                                                context, '파란색', '#00FFFF'),
+                                            _buildColorChip(
+                                                context, '분홍색', '#FF69B4'),
+                                            _buildColorChip(
+                                                context, '주황색', '#FFA500'),
+                                          ],
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            child: const Text('취소'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (newColor != null) {
+                                      // Update highlight color
+                                      await ref
+                                          .read(highlightRepositoryProvider)
+                                          .removeHighlight(highlight.id);
+                                      await ref
+                                          .read(highlightRepositoryProvider)
+                                          .addHighlight(
+                                            bookId: book.id,
+                                            startPosition:
+                                                highlight.startPosition,
+                                            endPosition: highlight.endPosition,
+                                            highlightedText:
+                                                highlight.highlightedText,
+                                            color: newColor,
+                                            note: highlight.note,
+                                          );
+                                    }
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete,
+                                      size: 20, color: Colors.red),
+                                  onPressed: () async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('하이라이트 삭제'),
+                                        content:
+                                            const Text('이 하이라이트를 삭제하시겠습니까?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
+                                            child: const Text('취소'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                            ),
+                                            child: const Text('삭제'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (confirmed == true) {
+                                      await ref
+                                          .read(highlightRepositoryProvider)
+                                          .removeHighlight(highlight.id);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            onTap: () {
+                              // Navigate to the book at the highlighted position
+                              context.push('/reader/${book.id}');
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                );
+              },
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error: $err')),
+    );
+  }
+
+  Widget _buildColorChip(BuildContext context, String label, String colorCode) {
+    final color =
+        Color(int.parse(colorCode.substring(1), radix: 16) + 0xFF000000);
+    return InkWell(
+      onTap: () => Navigator.pop(context, colorCode),
+      child: Container(
+        width: 80,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.3),
+          border: Border.all(color: color),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
