@@ -283,14 +283,6 @@ class ReaderSettingsPanel extends ConsumerWidget {
                                 child: Text('페이드'),
                               ),
                               DropdownMenuItem(
-                                value: 'scroll',
-                                child: Text('스크롤 (세로)'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'flip',
-                                child: Text('책 넘김 (Flip)'),
-                              ),
-                              DropdownMenuItem(
                                 value: 'none',
                                 child: Text('없음'),
                               ),

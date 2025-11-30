@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../data/local/schema/reading_settings_schema.dart';
 import '../../data/local/schema/text_book_schema.dart';
@@ -344,6 +345,12 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
     setState(() => _showMenu = !_showMenu);
   }
 
+  void _sharePage() {
+    if (_pages.isEmpty || _currentPageIndex >= _pages.length) return;
+    final text = _pages[_currentPageIndex].text;
+    Share.share(text, subject: _book?.title);
+  }
+
   void _showContents() {
     showModalBottomSheet(
       context: context,
@@ -596,50 +603,52 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
 
           return Stack(
             children: [
-              RichText(
-                textAlign: settings.textAlign == 'justify'
-                    ? TextAlign.justify
-                    : TextAlign.left,
-                text: highlightsAsync.when(
-                  data: (highlights) {
-                    final chunkGlobalOffset =
-                        (_book!.chunkCharOffsets != null &&
-                                _book!.chunkCharOffsets!.isNotEmpty)
-                            ? _book!.chunkCharOffsets![_currentChunkIndex]
-                            : 0;
+              SelectionArea(
+                child: RichText(
+                  textAlign: settings.textAlign == 'justify'
+                      ? TextAlign.justify
+                      : TextAlign.left,
+                  text: highlightsAsync.when(
+                    data: (highlights) {
+                      final chunkGlobalOffset =
+                          (_book!.chunkCharOffsets != null &&
+                                  _book!.chunkCharOffsets!.isNotEmpty)
+                              ? _book!.chunkCharOffsets![_currentChunkIndex]
+                              : 0;
 
-                    return _buildRichText(
-                      _pages[pageIndex].text,
-                      _pages[pageIndex].startIndex,
-                      highlights,
-                      TextStyle(
+                      return _buildRichText(
+                        _pages[pageIndex].text,
+                        _pages[pageIndex].startIndex,
+                        highlights,
+                        TextStyle(
+                          fontSize: settings.fontSize,
+                          height: settings.lineHeight,
+                          fontFamily: settings.fontFamily,
+                          letterSpacing: settings.letterSpacing,
+                          color: textColor,
+                        ),
+                        chunkGlobalOffset,
+                      );
+                    },
+                    loading: () => TextSpan(
+                      text: _pages[pageIndex].text,
+                      style: TextStyle(
                         fontSize: settings.fontSize,
                         height: settings.lineHeight,
                         fontFamily: settings.fontFamily,
                         letterSpacing: settings.letterSpacing,
                         color: textColor,
                       ),
-                      chunkGlobalOffset,
-                    );
-                  },
-                  loading: () => TextSpan(
-                    text: _pages[pageIndex].text,
-                    style: TextStyle(
-                      fontSize: settings.fontSize,
-                      height: settings.lineHeight,
-                      fontFamily: settings.fontFamily,
-                      letterSpacing: settings.letterSpacing,
-                      color: textColor,
                     ),
-                  ),
-                  error: (_, __) => TextSpan(
-                    text: _pages[pageIndex].text,
-                    style: TextStyle(
-                      fontSize: settings.fontSize,
-                      height: settings.lineHeight,
-                      fontFamily: settings.fontFamily,
-                      letterSpacing: settings.letterSpacing,
-                      color: textColor,
+                    error: (_, __) => TextSpan(
+                      text: _pages[pageIndex].text,
+                      style: TextStyle(
+                        fontSize: settings.fontSize,
+                        height: settings.lineHeight,
+                        fontFamily: settings.fontFamily,
+                        letterSpacing: settings.letterSpacing,
+                        color: textColor,
+                      ),
                     ),
                   ),
                 ),
@@ -790,6 +799,22 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(readingSettingsProvider);
 
+    // Listen for settings changes to re-paginate
+    ref.listen(readingSettingsProvider, (previous, next) {
+      next.whenData((settings) {
+        previous?.whenData((prevSettings) {
+          if (settings.fontSize != prevSettings.fontSize ||
+              settings.lineHeight != prevSettings.lineHeight ||
+              settings.fontFamily != prevSettings.fontFamily ||
+              settings.letterSpacing != prevSettings.letterSpacing ||
+              settings.textAlign != prevSettings.textAlign ||
+              settings.autoIndent != prevSettings.autoIndent) {
+            _paginateChunk(settings);
+          }
+        });
+      });
+    });
+
     return settingsAsync.when(
       data: (settings) {
         // Apply brightness
@@ -805,7 +830,7 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
         } else if (settings.orientationLock == 'landscape') {
           SystemChrome.setPreferredOrientations([
             DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
+            DeviceOrientation.landscapeRight
           ]);
         } else {
           SystemChrome.setPreferredOrientations([]);
@@ -840,28 +865,40 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
           _paginateChunk(settings);
         }
 
-        // Determine colors
+        // Determine colors based on theme
         Color bgColor;
         Color textColor;
-        if (settings.theme == 'white') {
-          bgColor = Colors.white;
-          textColor = Colors.black87;
-        } else if (settings.theme == 'sepia') {
-          bgColor = const Color(0xFFF4ECD8);
-          textColor = const Color(0xFF5F4B32);
-        } else if (settings.theme == 'dark') {
-          bgColor = const Color(0xFF1E1E1E);
-          textColor = const Color(0xFFE0E0E0);
-        } else if (settings.theme == 'black') {
-          bgColor = Colors.black;
-          textColor = Colors.grey;
-        } else {
-          bgColor = Color(
-            int.parse(settings.customBgColor.replaceFirst('#', '0xFF')),
-          );
-          textColor = Color(
-            int.parse(settings.customTextColor.replaceFirst('#', '0xFF')),
-          );
+
+        switch (settings.theme) {
+          case 'white':
+            bgColor = Colors.white;
+            textColor = Colors.black87;
+            break;
+          case 'sepia':
+            bgColor = const Color(0xFFF4ECD8);
+            textColor = const Color(0xFF5F4B32);
+            break;
+          case 'dark':
+            bgColor = const Color(0xFF1E1E1E);
+            textColor = const Color(0xFFE0E0E0);
+            break;
+          case 'black':
+            bgColor = Colors.black;
+            textColor = Colors.grey;
+            break;
+          default:
+            // Custom
+            try {
+              bgColor = Color(
+                int.parse(settings.customBgColor.replaceFirst('#', '0xFF')),
+              );
+              textColor = Color(
+                int.parse(settings.customTextColor.replaceFirst('#', '0xFF')),
+              );
+            } catch (e) {
+              bgColor = Colors.white;
+              textColor = Colors.black87;
+            }
         }
 
         if (_isLoading) {
@@ -1111,6 +1148,10 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                                 );
                               },
                             ),
+                          IconButton(
+                            icon: const Icon(Icons.share),
+                            onPressed: _sharePage,
+                          ),
                           IconButton(
                             icon: const Icon(Icons.list),
                             onPressed: _showContents,

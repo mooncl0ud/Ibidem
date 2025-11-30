@@ -64,11 +64,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               },
             ),
             IconButton(
-              icon: const Badge(
-                label: Text('1'),
-                backgroundColor: AppColors.warningRed,
-                child: Icon(Icons.mail_outline),
-              ),
+              icon: const Icon(Icons.mail_outline),
               onPressed: () {
                 Navigator.push(
                   context,
