@@ -283,6 +283,14 @@ class ReaderSettingsPanel extends ConsumerWidget {
                                 child: Text('페이드'),
                               ),
                               DropdownMenuItem(
+                                value: 'scroll',
+                                child: Text('스크롤 (세로)'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'flip',
+                                child: Text('책 넘김 (Flip)'),
+                              ),
+                              DropdownMenuItem(
                                 value: 'none',
                                 child: Text('없음'),
                               ),
@@ -332,9 +340,6 @@ Future<List<String>> availableFonts(AvailableFontsRef ref) async {
   // Default system fonts + custom fonts
   return [
     'Noto Sans KR',
-    'Roboto',
-    'Gowun Batang',
-    'Nanum Myeongjo',
     ...customFontNames,
   ];
 }
@@ -427,16 +432,27 @@ class _FontSettingsTab extends ConsumerWidget {
           padding: const EdgeInsets.all(16.0),
           child: ElevatedButton.icon(
             onPressed: () async {
+              debugPrint('Font Import Button Pressed');
               try {
+                // Changed to FileType.any because custom type with extensions
+                // sometimes fails to open picker on certain Android versions/emulators
                 final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['ttf', 'otf'],
+                  type: FileType.any,
                 );
 
                 if (result != null && result.files.single.path != null) {
-                  await ref
-                      .read(fontRepositoryProvider)
-                      .importFont(result.files.single.path!);
+                  final path = result.files.single.path!;
+                  if (!path.toLowerCase().endsWith('.ttf') &&
+                      !path.toLowerCase().endsWith('.otf')) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('TTF 또는 OTF 파일만 지원합니다.')),
+                      );
+                    }
+                    return;
+                  }
+
+                  await ref.read(fontRepositoryProvider).importFont(path);
                   ref.invalidate(availableFontsProvider);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -445,6 +461,7 @@ class _FontSettingsTab extends ConsumerWidget {
                   }
                 }
               } catch (e) {
+                debugPrint('Font Import Error: $e');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('폰트 추가 실패: $e')),

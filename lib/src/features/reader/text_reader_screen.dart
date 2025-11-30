@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
 import '../../data/local/schema/reading_settings_schema.dart';
 import '../../data/local/schema/text_book_schema.dart';
 import '../../data/local/schema/highlight_schema.dart';
@@ -49,6 +50,8 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
   bool _isAddingNote = false;
   Offset? _notePosition;
 
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +65,7 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _scrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _syncData(); // Sync on exit
     WakelockPlus.disable();
@@ -173,15 +177,16 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
       final size = mediaQuery.size;
       final safePadding = mediaQuery.padding;
 
-      // Fix Bottom Cut-off: Subtract SafeArea vertical padding
+      // Fix Bottom Cut-off: Subtract SafeArea vertical padding + safety buffer
       final availableHeight =
-          size.height - safePadding.top - safePadding.bottom;
+          size.height - safePadding.top - safePadding.bottom - 20;
 
       // Use full screen width (minus padding handled by parser)
       final paginateSize = Size(size.width, availableHeight);
 
       // Standard visual padding
-      final padding = const EdgeInsets.symmetric(horizontal: 24, vertical: 20);
+      // Increased bottom padding to 60 to avoid overlap with footer (Page Number/Clock)
+      final padding = const EdgeInsets.fromLTRB(24, 20, 24, 60);
 
       _pages = parser.paginate(
         content: content,
@@ -426,6 +431,222 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPageContent(
+    BuildContext context,
+    ReadingSettings settings,
+    Color bgColor,
+    Color textColor,
+  ) {
+    if (settings.pageTransition == 'scroll') {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          // Sync scroll controller if page changed externally
+          if (_scrollController.hasClients) {
+            final targetOffset = _currentPageIndex * constraints.maxHeight;
+            if ((_scrollController.offset - targetOffset).abs() > 10) {
+              _scrollController.jumpTo(targetOffset);
+            }
+          }
+
+          return NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollUpdateNotification) {
+                final page =
+                    (_scrollController.offset / constraints.maxHeight).round();
+                if (page != _currentPageIndex &&
+                    page >= 0 &&
+                    page < _pages.length) {
+                  _onPageChanged(page);
+                }
+              }
+              return false;
+            },
+            child: ListView.builder(
+              controller: _scrollController,
+              itemCount: _pages.length,
+              itemExtent: constraints.maxHeight,
+              physics: const BouncingScrollPhysics(),
+              itemBuilder: (context, index) {
+                return _buildSinglePage(
+                  context,
+                  settings,
+                  bgColor,
+                  textColor,
+                  index,
+                );
+              },
+            ),
+          );
+        },
+      );
+    } else if (settings.pageTransition == 'flip') {
+      return GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity! > 0) {
+            // Swipe Right -> Previous
+            if (_currentPageIndex > 0) _onPageChanged(_currentPageIndex - 1);
+          } else if (details.primaryVelocity! < 0) {
+            // Swipe Left -> Next
+            if (_currentPageIndex < _pages.length - 1)
+              _onPageChanged(_currentPageIndex + 1);
+          }
+        },
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: _buildFlipTransition,
+          layoutBuilder: (currentChild, previousChildren) {
+            return Stack(
+              children: <Widget>[
+                ...previousChildren,
+                if (currentChild != null) currentChild,
+              ],
+            );
+          },
+          child: _buildSinglePage(
+            context,
+            settings,
+            bgColor,
+            textColor,
+            _currentPageIndex,
+          ),
+        ),
+      );
+    } else {
+      // Animated Switcher (Slide / Fade / None)
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200), // Faster
+        switchInCurve: Curves.easeOutCubic, // Smoother
+        switchOutCurve: Curves.easeOutCubic,
+        transitionBuilder: (child, animation) {
+          if (settings.pageTransition == 'fade') {
+            return FadeTransition(
+              opacity: animation,
+              child: child,
+            );
+          } else if (settings.pageTransition == 'slide') {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1.0, 0.0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            );
+          }
+          return child; // none
+        },
+        child: _buildSinglePage(
+          context,
+          settings,
+          bgColor,
+          textColor,
+          _currentPageIndex,
+        ),
+      );
+    }
+  }
+
+  Widget _buildFlipTransition(Widget child, Animation<double> animation) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final isUnder = (ValueKey(_currentPageIndex) != child!.key);
+        double value;
+        if (isUnder) {
+          // Exiting: 0 -> pi/2
+          value = (1 - animation.value) * (pi / 2);
+        } else {
+          // Entering: -pi/2 -> 0
+          value = (animation.value - 1) * (pi / 2);
+        }
+        return Transform(
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.001) // Perspective
+            ..rotateY(value),
+          alignment: Alignment.center,
+          child: child,
+        );
+      },
+    );
+  }
+
+  Widget _buildSinglePage(
+    BuildContext context,
+    ReadingSettings settings,
+    Color bgColor,
+    Color textColor,
+    int pageIndex, {
+    Key? key,
+  }) {
+    return Container(
+      key: key ?? ValueKey(pageIndex),
+      color: bgColor,
+      width: double.infinity,
+      height: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 60),
+      child: Consumer(
+        builder: (context, ref, child) {
+          final highlightsAsync = _book != null
+              ? ref.watch(highlightsStreamProvider(_book!.id))
+              : const AsyncValue.data(<Highlight>[]);
+
+          return Stack(
+            children: [
+              RichText(
+                textAlign: settings.textAlign == 'justify'
+                    ? TextAlign.justify
+                    : TextAlign.left,
+                text: highlightsAsync.when(
+                  data: (highlights) {
+                    final chunkGlobalOffset =
+                        (_book!.chunkCharOffsets != null &&
+                                _book!.chunkCharOffsets!.isNotEmpty)
+                            ? _book!.chunkCharOffsets![_currentChunkIndex]
+                            : 0;
+
+                    return _buildRichText(
+                      _pages[pageIndex].text,
+                      _pages[pageIndex].startIndex,
+                      highlights,
+                      TextStyle(
+                        fontSize: settings.fontSize,
+                        height: settings.lineHeight,
+                        fontFamily: settings.fontFamily,
+                        letterSpacing: settings.letterSpacing,
+                        color: textColor,
+                      ),
+                      chunkGlobalOffset,
+                    );
+                  },
+                  loading: () => TextSpan(
+                    text: _pages[pageIndex].text,
+                    style: TextStyle(
+                      fontSize: settings.fontSize,
+                      height: settings.lineHeight,
+                      fontFamily: settings.fontFamily,
+                      letterSpacing: settings.letterSpacing,
+                      color: textColor,
+                    ),
+                  ),
+                  error: (_, __) => TextSpan(
+                    text: _pages[pageIndex].text,
+                    style: TextStyle(
+                      fontSize: settings.fontSize,
+                      height: settings.lineHeight,
+                      fontFamily: settings.fontFamily,
+                      letterSpacing: settings.letterSpacing,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -712,102 +933,16 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
                         ),
                       );
                     },
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (child, animation) {
-                        if (settings.pageTransition == 'fade') {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          );
-                        } else if (settings.pageTransition == 'slide') {
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(1.0, 0.0),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          );
-                        }
-                        return child; // none
-                      },
-                      child: Container(
-                        key: ValueKey(_currentPageIndex),
-                        color: bgColor,
-                        width: double.infinity,
-                        height: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 20,
-                        ),
-                        child: Consumer(
-                          builder: (context, ref, child) {
-                            final highlightsAsync = _book != null
-                                ? ref.watch(highlightsStreamProvider(_book!.id))
-                                : const AsyncValue.data(<Highlight>[]);
-
-                            return Stack(
-                              children: [
-                                RichText(
-                                  textAlign: settings.textAlign == 'justify'
-                                      ? TextAlign.justify
-                                      : TextAlign.left,
-                                  text: highlightsAsync.when(
-                                    data: (highlights) {
-                                      final chunkGlobalOffset =
-                                          (_book!.chunkCharOffsets != null &&
-                                                  _book!.chunkCharOffsets!
-                                                      .isNotEmpty)
-                                              ? _book!.chunkCharOffsets![
-                                                  _currentChunkIndex]
-                                              : 0;
-
-                                      return _buildRichText(
-                                        _pages[_currentPageIndex].text,
-                                        _pages[_currentPageIndex].startIndex,
-                                        highlights,
-                                        TextStyle(
-                                          fontSize: settings.fontSize,
-                                          height: settings.lineHeight,
-                                          fontFamily: settings.fontFamily,
-                                          letterSpacing: settings.letterSpacing,
-                                          color: textColor,
-                                        ),
-                                        chunkGlobalOffset,
-                                      );
-                                    },
-                                    loading: () => TextSpan(
-                                      text: _pages[_currentPageIndex].text,
-                                      style: TextStyle(
-                                        fontSize: settings.fontSize,
-                                        height: settings.lineHeight,
-                                        fontFamily: settings.fontFamily,
-                                        letterSpacing: settings.letterSpacing,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    error: (_, __) => TextSpan(
-                                      text: _pages[_currentPageIndex].text,
-                                      style: TextStyle(
-                                        fontSize: settings.fontSize,
-                                        height: settings.lineHeight,
-                                        fontFamily: settings.fontFamily,
-                                        letterSpacing: settings.letterSpacing,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ),
+                    child: _buildPageContent(
+                        context, settings, bgColor, textColor),
                   ),
 
-                  // Sticky Notes Overlay
-                  if (_book != null &&
+                  // Sticky Notes Overlay (Only for non-scroll/flip modes or handle separately)
+                  // For Scroll/Flip, we might need to integrate notes into the page builder
+                  // But for now, let's keep it simple.
+                  if (settings.pageTransition != 'scroll' &&
+                      settings.pageTransition != 'flip' &&
+                      _book != null &&
                       _book!.ownerId != null &&
                       _book!.sourceId != null)
                     Consumer(
