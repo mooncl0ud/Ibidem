@@ -8,7 +8,7 @@ import 'text_book_repository.dart';
 import '../social/inbox_screen.dart';
 import '../social/friend_list_screen.dart';
 import '../social/social_repository.dart';
-import 'friend_library_screen.dart';
+import '../social/friend_library_screen.dart';
 import '../social/inbox_repository.dart';
 import '../authentication/auth_repository.dart';
 import '../reader/highlight_repository.dart';
@@ -267,42 +267,91 @@ class _PrivateLibraryTab extends ConsumerWidget {
                 context.push('/reader/${book.id}');
               },
               onLongPress: () {
-                showDialog(
+                showModalBottomSheet(
                   context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('책 삭제'),
-                    content: Text("'${book.title}'을(를) 삭제하시겠습니까?"),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('취소'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          try {
-                            await ref
-                                .read(textBookRepositoryProvider)
-                                .deleteBook(book);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('책이 삭제되었습니다.')),
-                              );
+                  builder: (context) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.share,
+                              color: AppColors.brandOrange),
+                          title: const Text('프로필에 공유하기'),
+                          onTap: () async {
+                            Navigator.pop(context);
+                            try {
+                              await ref
+                                  .read(textBookRepositoryProvider)
+                                  .shareBookToProfile(book);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('책이 공유 서재에 추가되었습니다.')),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('공유 실패: $e')),
+                                );
+                              }
                             }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('삭제 실패: $e')),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text(
-                          '삭제',
-                          style: TextStyle(color: AppColors.warningRed),
+                          },
                         ),
-                      ),
-                    ],
+                        ListTile(
+                          leading: const Icon(Icons.delete,
+                              color: AppColors.warningRed),
+                          title: const Text('책 삭제',
+                              style: TextStyle(color: AppColors.warningRed)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('책 삭제'),
+                                content: Text("'${book.title}'을(를) 삭제하시겠습니까?"),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('취소'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () async {
+                                      Navigator.pop(context);
+                                      try {
+                                        await ref
+                                            .read(textBookRepositoryProvider)
+                                            .deleteBook(book);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text('책이 삭제되었습니다.')),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                                content: Text('삭제 실패: $e')),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    child: const Text(
+                                      '삭제',
+                                      style: TextStyle(
+                                          color: AppColors.warningRed),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },

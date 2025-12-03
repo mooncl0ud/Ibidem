@@ -231,7 +231,6 @@ class TextParser {
 
   /// Paginates the text based on the given constraints and style.
   /// Returns a list of ReaderPage objects.
-  /// Paginates the text based on the given constraints and style.
   /// Uses TextPainter to measure actual rendering height and splits at ZWSP boundaries.
   List<ReaderPage> paginate({
     required String content,

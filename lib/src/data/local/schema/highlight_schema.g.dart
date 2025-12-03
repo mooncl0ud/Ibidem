@@ -37,18 +37,33 @@ const HighlightSchema = CollectionSchema(
       name: r'endPosition',
       type: IsarType.long,
     ),
-    r'highlightedText': PropertySchema(
+    r'firestoreId': PropertySchema(
       id: 4,
+      name: r'firestoreId',
+      type: IsarType.string,
+    ),
+    r'highlightedText': PropertySchema(
+      id: 5,
       name: r'highlightedText',
       type: IsarType.string,
     ),
+    r'isDeleted': PropertySchema(
+      id: 6,
+      name: r'isDeleted',
+      type: IsarType.bool,
+    ),
+    r'isSynced': PropertySchema(
+      id: 7,
+      name: r'isSynced',
+      type: IsarType.bool,
+    ),
     r'note': PropertySchema(
-      id: 5,
+      id: 8,
       name: r'note',
       type: IsarType.string,
     ),
     r'startPosition': PropertySchema(
-      id: 6,
+      id: 9,
       name: r'startPosition',
       type: IsarType.long,
     )
@@ -58,7 +73,47 @@ const HighlightSchema = CollectionSchema(
   deserialize: _highlightDeserialize,
   deserializeProp: _highlightDeserializeProp,
   idName: r'id',
-  indexes: {},
+  indexes: {
+    r'firestoreId': IndexSchema(
+      id: 1863077355534729001,
+      name: r'firestoreId',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'firestoreId',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'isSynced': IndexSchema(
+      id: -39763503327887510,
+      name: r'isSynced',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'isSynced',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    ),
+    r'isDeleted': IndexSchema(
+      id: -786475870904832312,
+      name: r'isDeleted',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'isDeleted',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    )
+  },
   links: {},
   embeddedSchemas: {},
   getId: _highlightGetId,
@@ -74,6 +129,7 @@ int _highlightEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.color.length * 3;
+  bytesCount += 3 + object.firestoreId.length * 3;
   bytesCount += 3 + object.highlightedText.length * 3;
   {
     final value = object.note;
@@ -94,9 +150,12 @@ void _highlightSerialize(
   writer.writeString(offsets[1], object.color);
   writer.writeDateTime(offsets[2], object.createdAt);
   writer.writeLong(offsets[3], object.endPosition);
-  writer.writeString(offsets[4], object.highlightedText);
-  writer.writeString(offsets[5], object.note);
-  writer.writeLong(offsets[6], object.startPosition);
+  writer.writeString(offsets[4], object.firestoreId);
+  writer.writeString(offsets[5], object.highlightedText);
+  writer.writeBool(offsets[6], object.isDeleted);
+  writer.writeBool(offsets[7], object.isSynced);
+  writer.writeString(offsets[8], object.note);
+  writer.writeLong(offsets[9], object.startPosition);
 }
 
 Highlight _highlightDeserialize(
@@ -110,10 +169,13 @@ Highlight _highlightDeserialize(
   object.color = reader.readString(offsets[1]);
   object.createdAt = reader.readDateTime(offsets[2]);
   object.endPosition = reader.readLong(offsets[3]);
-  object.highlightedText = reader.readString(offsets[4]);
+  object.firestoreId = reader.readString(offsets[4]);
+  object.highlightedText = reader.readString(offsets[5]);
   object.id = id;
-  object.note = reader.readStringOrNull(offsets[5]);
-  object.startPosition = reader.readLong(offsets[6]);
+  object.isDeleted = reader.readBool(offsets[6]);
+  object.isSynced = reader.readBool(offsets[7]);
+  object.note = reader.readStringOrNull(offsets[8]);
+  object.startPosition = reader.readLong(offsets[9]);
   return object;
 }
 
@@ -135,8 +197,14 @@ P _highlightDeserializeProp<P>(
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 6:
+      return (reader.readBool(offset)) as P;
+    case 7:
+      return (reader.readBool(offset)) as P;
+    case 8:
+      return (reader.readStringOrNull(offset)) as P;
+    case 9:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -160,6 +228,22 @@ extension HighlightQueryWhereSort
   QueryBuilder<Highlight, Highlight, QAfterWhere> anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhere> anyIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'isSynced'),
+      );
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhere> anyIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'isDeleted'),
+      );
     });
   }
 }
@@ -228,6 +312,141 @@ extension HighlightQueryWhere
         upper: upperId,
         includeUpper: includeUpper,
       ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhereClause> firestoreIdEqualTo(
+      String firestoreId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'firestoreId',
+        value: [firestoreId],
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhereClause> firestoreIdNotEqualTo(
+      String firestoreId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'firestoreId',
+              lower: [],
+              upper: [firestoreId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'firestoreId',
+              lower: [firestoreId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'firestoreId',
+              lower: [firestoreId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'firestoreId',
+              lower: [],
+              upper: [firestoreId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhereClause> isSyncedEqualTo(
+      bool isSynced) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'isSynced',
+        value: [isSynced],
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhereClause> isSyncedNotEqualTo(
+      bool isSynced) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isSynced',
+              lower: [],
+              upper: [isSynced],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isSynced',
+              lower: [isSynced],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isSynced',
+              lower: [isSynced],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isSynced',
+              lower: [],
+              upper: [isSynced],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhereClause> isDeletedEqualTo(
+      bool isDeleted) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'isDeleted',
+        value: [isDeleted],
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterWhereClause> isDeletedNotEqualTo(
+      bool isDeleted) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isDeleted',
+              lower: [],
+              upper: [isDeleted],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isDeleted',
+              lower: [isDeleted],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isDeleted',
+              lower: [isDeleted],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isDeleted',
+              lower: [],
+              upper: [isDeleted],
+              includeUpper: false,
+            ));
+      }
     });
   }
 }
@@ -525,6 +744,140 @@ extension HighlightQueryFilter
     });
   }
 
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> firestoreIdEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'firestoreId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition>
+      firestoreIdGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'firestoreId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> firestoreIdLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'firestoreId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> firestoreIdBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'firestoreId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition>
+      firestoreIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'firestoreId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> firestoreIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'firestoreId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> firestoreIdContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'firestoreId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> firestoreIdMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'firestoreId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition>
+      firestoreIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'firestoreId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition>
+      firestoreIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'firestoreId',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Highlight, Highlight, QAfterFilterCondition>
       highlightedTextEqualTo(
     String value, {
@@ -710,6 +1063,26 @@ extension HighlightQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> isDeletedEqualTo(
+      bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isDeleted',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterFilterCondition> isSyncedEqualTo(
+      bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isSynced',
+        value: value,
       ));
     });
   }
@@ -972,6 +1345,18 @@ extension HighlightQuerySortBy on QueryBuilder<Highlight, Highlight, QSortBy> {
     });
   }
 
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByFirestoreId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'firestoreId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByFirestoreIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'firestoreId', Sort.desc);
+    });
+  }
+
   QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByHighlightedText() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'highlightedText', Sort.asc);
@@ -981,6 +1366,30 @@ extension HighlightQuerySortBy on QueryBuilder<Highlight, Highlight, QSortBy> {
   QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByHighlightedTextDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'highlightedText', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByIsDeletedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> sortByIsSyncedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.desc);
     });
   }
 
@@ -1059,6 +1468,18 @@ extension HighlightQuerySortThenBy
     });
   }
 
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByFirestoreId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'firestoreId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByFirestoreIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'firestoreId', Sort.desc);
+    });
+  }
+
   QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByHighlightedText() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'highlightedText', Sort.asc);
@@ -1080,6 +1501,30 @@ extension HighlightQuerySortThenBy
   QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByIsDeletedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QAfterSortBy> thenByIsSyncedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.desc);
     });
   }
 
@@ -1135,11 +1580,30 @@ extension HighlightQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Highlight, Highlight, QDistinct> distinctByFirestoreId(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'firestoreId', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Highlight, Highlight, QDistinct> distinctByHighlightedText(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'highlightedText',
           caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QDistinct> distinctByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isDeleted');
+    });
+  }
+
+  QueryBuilder<Highlight, Highlight, QDistinct> distinctByIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isSynced');
     });
   }
 
@@ -1189,9 +1653,27 @@ extension HighlightQueryProperty
     });
   }
 
+  QueryBuilder<Highlight, String, QQueryOperations> firestoreIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'firestoreId');
+    });
+  }
+
   QueryBuilder<Highlight, String, QQueryOperations> highlightedTextProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'highlightedText');
+    });
+  }
+
+  QueryBuilder<Highlight, bool, QQueryOperations> isDeletedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isDeleted');
+    });
+  }
+
+  QueryBuilder<Highlight, bool, QQueryOperations> isSyncedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isSynced');
     });
   }
 

@@ -7,7 +7,7 @@ part of 'sticky_note_repository.dart';
 // **************************************************************************
 
 String _$stickyNoteRepositoryHash() =>
-    r'752a03c3cef1b666a7337f57a813565bea3b32e6';
+    r'c5d92a50a1081e04782347b500966484e6dde300';
 
 /// See also [stickyNoteRepository].
 @ProviderFor(stickyNoteRepository)

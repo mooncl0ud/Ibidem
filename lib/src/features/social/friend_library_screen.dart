@@ -49,14 +49,13 @@ class FriendLibraryScreen extends ConsumerWidget {
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(response.bodyBytes);
 
-      final importedBook = await ref
-          .read(textBookRepositoryProvider)
-          .importSharedBook(
-            file,
-            bookData['title'] ?? 'Untitled',
-            bookData['id'], // sourceId
-            friendId, // ownerId
-          );
+      final importedBook =
+          await ref.read(textBookRepositoryProvider).importSharedBook(
+                file,
+                bookData['title'] ?? 'Untitled',
+                bookData['id'], // sourceId
+                friendId, // ownerId
+              );
 
       if (context.mounted) {
         Navigator.pop(context); // Dismiss loading
@@ -81,7 +80,6 @@ class FriendLibraryScreen extends ConsumerWidget {
             .collection('users')
             .doc(friendId)
             .collection('shared_books')
-            .orderBy('sharedAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {

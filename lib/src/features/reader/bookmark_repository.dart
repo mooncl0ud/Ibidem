@@ -4,6 +4,7 @@ import '../../data/local/local_database_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/local/schema/bookmark_schema.dart';
+import '../../data/local/schema/text_book_schema.dart';
 import '../authentication/auth_repository.dart';
 import '../sync/sync_manager.dart';
 
@@ -153,6 +154,12 @@ class BookmarkRepository {
     final bookIdStr = bookId.toString();
     final bookIdInt = int.tryParse(bookIdStr) ?? 0;
 
+    // Check if book is shared (skip Firestore sync for shared books)
+    final book = await _isar.textBooks.get(bookIdInt);
+    if (book != null && book.ownerId != null && book.ownerId != _userId) {
+      return; // Skip sync for shared books
+    }
+
     try {
       // 1. Fetch remote bookmarks
       final snapshot = await _firestore
@@ -207,11 +214,11 @@ class BookmarkRepository {
               .doc(bookIdStr)
               .collection('bookmarks')
               .add({
-                'charPosition': local.charPosition,
-                'pageNumber': local.pageNumber,
-                'label': local.label,
-                'createdAt': Timestamp.fromDate(local.createdAt),
-              });
+            'charPosition': local.charPosition,
+            'pageNumber': local.pageNumber,
+            'label': local.label,
+            'createdAt': Timestamp.fromDate(local.createdAt),
+          });
         }
       }
     } catch (e) {

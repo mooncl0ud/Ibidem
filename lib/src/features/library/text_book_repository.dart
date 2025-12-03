@@ -278,6 +278,9 @@ class TextBookRepository {
     final book = await _isar.textBooks.get(bookId);
     if (book == null) return;
 
+    // Skip sync for shared books (we don't own the Firestore document)
+    if (book.ownerId != null && book.ownerId != _userId) return;
+
     try {
       await _firestore
           .collection('users')
@@ -307,6 +310,9 @@ class TextBookRepository {
     if (_userId == null) return;
     final book = await _isar.textBooks.get(bookId);
     if (book == null) return;
+
+    // Skip sync for shared books (we don't have permission to read friend's Firestore)
+    if (book.ownerId != null && book.ownerId != _userId) return;
 
     try {
       final doc = await _firestore
@@ -436,6 +442,38 @@ class TextBookRepository {
       }
     } catch (e) {
       debugPrint('Sync failed: $e');
+    }
+  }
+
+  Future<void> shareBookToProfile(TextBook book) async {
+    if (_userId == null) return;
+
+    final data = {
+      'title': book.title,
+      'author': book.author,
+      'encoding': book.encoding,
+      'totalCharacters': book.totalCharacters,
+      'addedAt': Timestamp.fromDate(book.addedAt ?? DateTime.now()),
+      'lastReadAt': Timestamp.fromDate(book.lastReadAt ?? DateTime.now()),
+      'currentPosition': book.currentCharPosition,
+      'sharedAt': FieldValue.serverTimestamp(),
+      'sizeBytes': book.fileSizeBytes,
+    };
+
+    if (book.coverUrl != null) {
+      data['downloadUrl'] = book.coverUrl;
+    }
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('shared_books')
+          .doc(book.id.toString())
+          .set(data, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Failed to share book to profile: $e');
+      rethrow;
     }
   }
 }

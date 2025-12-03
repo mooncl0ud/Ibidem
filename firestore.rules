@@ -1,9 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 사용자 데이터는 해당 사용자 본인만 접근 가능
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Users collection - 인증된 모든 사용자가 프로필을 읽을 수 있음
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      // Friends subcollection
+      match /friends/{friendId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+
+      // Shared Books - 인증된 모든 사용자가 읽을 수 있음
+      match /shared_books/{bookId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Text Books - 소유자만 읽고 쓸 수 있지만, notes는 공유
+      match /text_books/{bookId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == userId;
+
+        // Sticky Notes - 인증된 모든 사용자가 읽고 쓸 수 있음 (협업 기능)
+        match /notes/{noteId} {
+          allow read, write: if request.auth != null;
+        }
+      }
+
+      // Settings - 소유자만
+      match /settings/{settingId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Friend Requests - 인증된 모든 사용자가 생성 가능
+    match /friend_requests/{requestId} {
+      allow create: if request.auth != null;
+      allow read, delete: if request.auth != null && 
+        (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
     }
   }
 }

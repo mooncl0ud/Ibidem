@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'src/data/local/local_database.dart';
@@ -24,11 +26,32 @@ void main() async {
   );
 }
 
-class IbidemApp extends ConsumerWidget {
+class IbidemApp extends ConsumerStatefulWidget {
   const IbidemApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<IbidemApp> createState() => _IbidemAppState();
+}
+
+class _IbidemAppState extends ConsumerState<IbidemApp> {
+  @override
+  void initState() {
+    super.initState();
+    _setHighRefreshRate();
+  }
+
+  Future<void> _setHighRefreshRate() async {
+    if (Platform.isAndroid) {
+      try {
+        await FlutterDisplayMode.setHighRefreshRate();
+      } catch (e) {
+        debugPrint('Error setting high refresh rate: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

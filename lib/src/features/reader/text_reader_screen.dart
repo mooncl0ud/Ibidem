@@ -117,15 +117,34 @@ class _TextReaderScreenState extends ConsumerState<TextReaderScreen>
     final bookId = int.tryParse(widget.bookId);
     if (bookId == null) return;
 
-    // Sync from Firestore before loading
-    await ref
-        .read(textBookRepositoryProvider)
-        .syncPositionFromFirestore(bookId);
-    await ref.read(bookmarkRepositoryProvider).syncBookmarks(bookId);
-    await ref.read(highlightRepositoryProvider).syncHighlights(bookId);
-    await ref
-        .read(readingSettingsRepositoryProvider)
-        .syncSettingsFromFirestore();
+    // Sync from Firestore before loading (but don't block on errors)
+    try {
+      await ref
+          .read(textBookRepositoryProvider)
+          .syncPositionFromFirestore(bookId);
+    } catch (e) {
+      debugPrint('Failed to sync position: $e');
+    }
+
+    try {
+      await ref.read(bookmarkRepositoryProvider).syncBookmarks(bookId);
+    } catch (e) {
+      debugPrint('Failed to sync bookmarks: $e');
+    }
+
+    try {
+      await ref.read(highlightRepositoryProvider).syncHighlights(bookId);
+    } catch (e) {
+      debugPrint('Failed to sync highlights: $e');
+    }
+
+    try {
+      await ref
+          .read(readingSettingsRepositoryProvider)
+          .syncSettingsFromFirestore();
+    } catch (e) {
+      debugPrint('Failed to sync settings: $e');
+    }
 
     final books = await ref.read(textBookRepositoryProvider).getBooks();
     try {

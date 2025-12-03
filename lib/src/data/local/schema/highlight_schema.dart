@@ -22,4 +22,13 @@ class Highlight {
 
   // Metadata
   late DateTime createdAt;
+
+  @Index()
+  late String firestoreId;
+
+  @Index()
+  bool isSynced = true;
+
+  @Index()
+  bool isDeleted = false;
 }

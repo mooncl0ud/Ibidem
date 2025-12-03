@@ -7,6 +7,7 @@ import 'schema/bookmark_schema.dart';
 import 'schema/highlight_schema.dart';
 import 'schema/reading_settings_schema.dart';
 import 'schema/sync_queue_schema.dart';
+import 'schema/sticky_note_schema.dart';
 
 class LocalDatabase {
   late Isar _isar;
@@ -21,6 +22,7 @@ class LocalDatabase {
       HighlightSchema,
       ReadingSettingsSchema,
       SyncQueueItemSchema,
+      StickyNoteEntitySchema,
     ], directory: dir.path);
   }
 

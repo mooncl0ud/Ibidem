@@ -43,8 +43,8 @@ class ReadingSettingsRepository {
         'saveSettings called: theme=${model.theme}, fontSize=${model.fontSize}, brightness=${model.brightness}');
     await _saveToIsar(model);
     debugPrint('Settings saved to Isar successfully');
-    // Trigger sync
-    syncSettingsToFirestore();
+    // Sync disabled as per user request
+    // syncSettingsToFirestore();
   }
 
   Future<void> _saveToIsar(ReadingSettingsModel model) async {
@@ -165,89 +165,13 @@ class ReadingSettingsRepository {
   }
 
   Future<void> syncSettingsToFirestore() async {
-    if (_userId == null) return;
-
-    try {
-      final settings = await getSettings();
-      await _firestore
-          .collection('users')
-          .doc(_userId)
-          .collection('settings')
-          .doc('reading')
-          .set({
-        'fontFamily': settings.fontFamily,
-        'fontSize': settings.fontSize,
-        'lineHeight': settings.lineHeight,
-        'letterSpacing': settings.letterSpacing,
-        'wordScale': settings.wordScale,
-        'theme': settings.theme,
-        'customBgColor': settings.customBgColor,
-        'customTextColor': settings.customTextColor,
-        'tapZoneMode': settings.tapZoneMode,
-        'touchZoneSize': settings.touchZoneSize,
-        'pageTransition': settings.pageTransition,
-        'volumeKeyNavEnabled': settings.volumeKeyNavEnabled,
-        'orientationLock': settings.orientationLock,
-        'hideStatusBar': settings.hideStatusBar,
-        'showPageNumber': settings.showPageNumber,
-        'showClock': settings.showClock,
-        'showProgressBar': settings.showProgressBar,
-        'textAlign': settings.textAlign,
-        'autoIndent': settings.autoIndent,
-        'paragraphSpacing': settings.paragraphSpacing,
-        'twoPageView': settings.twoPageView,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('Failed to sync settings to Firestore: $e');
-    }
+    // Disabled as per user request
+    return;
   }
 
   Future<void> syncSettingsFromFirestore() async {
-    if (_userId == null) return;
-
-    try {
-      final doc = await _firestore
-          .collection('users')
-          .doc(_userId)
-          .collection('settings')
-          .doc('reading')
-          .get();
-
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        final current = await getSettings();
-
-        // Update local settings
-        final updated = current.copyWith(
-          fontFamily: data['fontFamily'],
-          fontSize: (data['fontSize'] as num?)?.toDouble(),
-          lineHeight: (data['lineHeight'] as num?)?.toDouble(),
-          letterSpacing: (data['letterSpacing'] as num?)?.toDouble(),
-          wordScale: (data['wordScale'] as num?)?.toDouble(),
-          theme: data['theme'],
-          customBgColor: data['customBgColor'],
-          customTextColor: data['customTextColor'],
-          tapZoneMode: data['tapZoneMode'],
-          touchZoneSize: (data['touchZoneSize'] as num?)?.toDouble(),
-          pageTransition: data['pageTransition'],
-          volumeKeyNavEnabled: data['volumeKeyNavEnabled'],
-          orientationLock: data['orientationLock'],
-          hideStatusBar: data['hideStatusBar'],
-          showPageNumber: data['showPageNumber'],
-          showClock: data['showClock'],
-          showProgressBar: data['showProgressBar'],
-          textAlign: data['textAlign'],
-          autoIndent: data['autoIndent'],
-          paragraphSpacing: data['paragraphSpacing'],
-          twoPageView: data['twoPageView'],
-        );
-
-        await saveSettings(updated);
-      }
-    } catch (e) {
-      debugPrint('Failed to sync settings from Firestore: $e');
-    }
+    // Disabled as per user request
+    return;
   }
 }
 
